@@ -1,5 +1,7 @@
 import io
+import time
 import boto3
+from botocore.exceptions import ClientError
 from PyPDF2 import PdfReader
 from app.config import AWS_ACCESS_KEY, AWS_SECRET_KEY, S3_BUCKET
 
@@ -14,6 +16,11 @@ def fetch_pdf_files():
     return [f["Key"] for f in response.get("Contents", []) if f["Key"].endswith(".pdf")]
 
 def extract_text_from_pdf(s3_key: str) -> str:
-    obj = s3.get_object(Bucket=S3_BUCKET, Key=s3_key)
-    reader = PdfReader(io.BytesIO(obj["Body"].read()))
-    return "\n".join([page.extract_text() or "" for page in reader.pages])
+    retries = 3
+    for attempt in range(retries):
+        try:
+            obj = s3.get_object(Bucket=S3_BUCKET, Key=s3_key)
+            reader = PdfReader(io.BytesIO(obj["Body"].read()))
+            return "\n".join([page.extract_text() or "" for page in reader.pages])
+        except ClientError as e:
+            time.sleep(2 ** attempt)

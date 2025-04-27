@@ -7,11 +7,16 @@ router = APIRouter()
 
 @router.get("/search")
 def search(q: str = Query(..., description="Semantic search query")):
-    if not vector_store.is_ready:
-        return {"results": ["Index is still being built. Please try again later."]}
-    q_vector = get_embeddings([q])[0]
-    results = vector_store.search(np.array([q_vector]))
-    return {"results": results}
+    try:
+        if not vector_store.is_ready:
+            return {"results": ["Index is still being built. Please try again later."]}
+        if not q.strip():
+            return {"results": [], "message": "Query cannot be empty."}
+        q_vector = get_embeddings([q])[0]
+        results = vector_store.search(np.array([q_vector]))
+        return {"results": results}
+    except Exception as e:
+        return {"results": [], "error": str(e)}
 
 @router.get("/status")
 def status():

@@ -1,4 +1,5 @@
 import threading
+import concurrent.futures
 from app.vectorstore import FAISSVectorStore
 from app.s3_loader import fetch_pdf_files, extract_text_from_pdf
 from app.embedder import get_embeddings, chunk_text
@@ -9,10 +10,12 @@ def build_index_background():
     global vector_store
     files = fetch_pdf_files()
     all_chunks = []
-    for f in files:
-        text = extract_text_from_pdf(f)
-        chunks = chunk_text(text)
-        all_chunks.extend(chunks)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        futures = [executor.submit(extract_text_from_pdf, f) for f in files]
+        for future in concurrent.futures.as_completed(futures):
+            text = future.result()
+            chunks = chunk_text(text)
+            all_chunks.extend(chunks)
     if all_chunks:
         vectors = get_embeddings(all_chunks)
         vector_store.add(vectors, all_chunks)

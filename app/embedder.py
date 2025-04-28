@@ -1,5 +1,5 @@
 import numpy as np
-from typing import List
+from typing import List, Generator
 from sentence_transformers import SentenceTransformer
 from app.config import EMBED_MODEL_NAME
 
@@ -37,10 +37,17 @@ def get_embeddings(texts: list[str]) -> np.ndarray:
 
     return np.array(results)
 
-def chunk_text(text: str, size=300, overlap=50) -> List[str]:
+def chunk_text_generator(text: str, size: int = 300, overlap: int = 50) -> Generator[str, None, None]:
     words = text.split()
-    chunks = []
-    for i in range(0, len(words), size - overlap):
-        chunk = " ".join(words[i:i+size])
-        chunks.append(chunk)
-    return chunks
+    if not words:
+        return
+
+    start = 0
+    while start < len(words):
+        end = min(start + size, len(words))
+        chunk = " ".join(words[start:end])
+        yield chunk
+        start += (size - overlap)
+
+def chunk_text(text: str, size: int = 300, overlap: int = 50) -> List[str]:
+    return list(chunk_text_generator(text, size, overlap))

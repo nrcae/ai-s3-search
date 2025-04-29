@@ -3,6 +3,7 @@ import time
 import boto3
 from botocore.exceptions import ClientError
 from PyPDF2 import PdfReader
+from typing import List
 from app.config import AWS_ACCESS_KEY, AWS_SECRET_KEY, S3_BUCKET
 
 s3 = boto3.client(
@@ -11,9 +12,15 @@ s3 = boto3.client(
     aws_secret_access_key=AWS_SECRET_KEY
 )
 
-def fetch_pdf_files():
-    response = s3.list_objects_v2(Bucket=S3_BUCKET)
-    return [f["Key"] for f in response.get("Contents", []) if f["Key"].endswith(".pdf")]
+def fetch_pdf_files() -> List[str]:
+    paginator = s3.get_paginator("list_objects_v2")
+        # Use a concise list comprehension with pagination
+    return [
+        obj.get("Key")
+        for page in paginator.paginate(Bucket=S3_BUCKET) # Iterate through all pages
+        for obj in page.get("Contents", []) # Iterate through objects in the page (handles empty pages)
+        if obj.get("Key") and obj.get("Key").endswith(".pdf") # Ensure Key exists and ends with .pdf
+    ]
 
 def extract_text_from_pdf(s3_key: str) -> str:
     retries = 3

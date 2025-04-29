@@ -21,13 +21,26 @@ def fetch_pdf_files() -> List[str]:
         for obj in page.get("Contents", []) # Iterate through objects in the page (handles empty pages)
         if obj.get("Key") and obj.get("Key").endswith(".pdf") # Ensure Key exists and ends with .pdf
     ]
-
+    
 def extract_text_from_pdf(s3_key: str) -> str:
-    retries = 3
-    for attempt in range(retries):
-        try:
-            obj = s3.get_object(Bucket=S3_BUCKET, Key=s3_key)
-            reader = PdfReader(io.BytesIO(obj["Body"].read()))
-            return "\n".join([page.extract_text() or "" for page in reader.pages])
-        except ClientError as e:
-            time.sleep(2 ** attempt)
+    try:
+        # Body is a StreamingBody and avoid loading the entire PDF into memory.
+        response = s3.get_object(Bucket=S3_BUCKET, Key=s3_key)
+        pdf_content_bytes = response["Body"].read()
+
+        # Wrap the in-memory bytes with io.BytesIO to make it seekable
+        pdf_file_like_object = io.BytesIO(pdf_content_bytes)
+        # Process the BytesIO object with PdfReader
+        reader = PdfReader(pdf_file_like_object)
+
+        # Extract text using a generator expression within join
+        extracted_text = "\n".join(page.extract_text() or "" for page in reader.pages)
+
+        return extracted_text
+
+    # Catch both specific S3 errors and general processing errors
+    except (ClientError, Exception) as e:
+        # Log the error for debugging
+        print(f"Error processing PDF '{s3_key}': {e}")
+        # Return an empty string consistently on failure
+        return ""

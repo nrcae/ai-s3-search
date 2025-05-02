@@ -1,0 +1,42 @@
+# .dockerignore
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+.venv
+venv
+env
+ENV
+
+# Build artifacts
+build/
+dist/
+*.egg-info
+
+# Git files
+.git
+.gitignore
+
+# Docker files
+Dockerfile
+.dockerignore
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.idea/
+.vscode/
+
+# Secrets / Environment files
+.env
+*.env
+
+# Local data / caches (if any, besides the model cache handled by library)
+data/
+*.log

@@ -40,3 +40,8 @@ Thumbs.db
 # Local data / caches (if any, besides the model cache handled by library)
 data/
 *.log
+
+# Rust module entries
+text_normalizer/target/
+text_normalizer/Cargo.lock
+

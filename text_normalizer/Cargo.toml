@@ -1,0 +1,12 @@
+# text_normalizer/Cargo.toml
+[package]
+name = "text_normalizer"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "text_normalizer"
+crate-type = ["cdylib"]     # Compile for Python extension
+
+[dependencies]
+pyo3 = { version = "0.24.2", features = ["extension-module"] }

@@ -2,3 +2,5 @@ node_modules/
 .env
 .DS_Store
 __pycache__
+text_normalizer/target
+text_normalizer/Cargo.lock

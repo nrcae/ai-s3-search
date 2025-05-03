@@ -5,15 +5,25 @@ from app.vectorstore import FAISSVectorStore
 from app.s3_loader import fetch_pdf_files, extract_text_from_pdf
 from app.embedder import get_embeddings, chunk_text
 
-# --- ADD Import for Rust module with fallback ---
+# Attempt to import the BATCH function first
 try:
-    from text_normalizer import normalize_text as normalize_text_rust
-    print("INFO:     Using Rust 'normalize_text' function.")
+    from text_normalizer import normalize_text_batch as normalize_text_batch_rust
+    print("INFO:     Using Rust 'normalize_text_batch' function.")
+    use_rust_batch = True
 except ImportError:
-    print("WARNING:  Rust module 'text_normalizer_lib' not found. Using Python fallback for normalization.")
-    # Minimal Python fallback implementation
-    def normalize_text_rust(text: str) -> str:
-        return text.strip().lower()
+    print("WARNING:  Rust batch function 'normalize_text_batch' not found. Will attempt single normalization.")
+    use_rust_batch = False
+    # If batch fails, try importing the SINGLE function
+    try:
+        from text_normalizer import normalize_text as normalize_text_rust
+        print("INFO:     Using Rust 'normalize_text' function.")
+        use_rust_single = True
+    except ImportError:
+        print("WARNING:  Rust single function 'normalize_text' not found. Using Python fallback.")
+        use_rust_single = False
+        # Minimal Python fallback implementation if both Rust imports fail
+        def normalize_text_fallback(text: str) -> str:
+            return text.strip().lower()
 
 vector_store = FAISSVectorStore()
 
@@ -33,10 +43,14 @@ def optimized_batch_embedding(chunk_generator: Generator[str, None, None], batch
     batch: List[str] = []
 
     for chunk in chunk_generator:
-        normalized_chunk = normalize_text_rust(chunk)
-        batch.append(normalized_chunk)
+        batch.append(chunk)
         if len(batch) >= batch_size:
+            normalized_batch = []
             try:
+                if use_rust_batch: normalized_batch = normalize_text_batch_rust(batch)
+                elif use_rust_single: normalized_batch = [normalize_text_rust(c) for c in batch]
+                else: normalized_batch = [normalize_text_fallback(c) for c in batch]
+
                 vectors = get_embeddings(batch)
                 vector_store.add(vectors, batch) # Assumes add sets is_ready eventually
             except Exception as e:
@@ -45,9 +59,15 @@ def optimized_batch_embedding(chunk_generator: Generator[str, None, None], batch
                  batch.clear()
 
     if batch:
+        normalized_batch = []
         try:
-            vectors = get_embeddings(batch)
-            vector_store.add(vectors, batch)
+            if use_rust_batch: normalized_batch = normalize_text_batch_rust(batch)
+            elif use_rust_single: normalized_batch = [normalize_text_rust(c) for c in batch]
+            else: normalized_batch = [normalize_text_fallback(c) for c in batch]
+
+            # Embed and add the final normalized batch
+            vectors = get_embeddings(normalized_batch)
+            vector_store.add(vectors, normalized_batch)
         except Exception as e:
             print(f"Error processing final batch: {e}")
 

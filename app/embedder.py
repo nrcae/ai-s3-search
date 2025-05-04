@@ -30,14 +30,14 @@ def get_embeddings(texts: list[str]) -> np.ndarray:
 
     # Encode only uncached texts
     if uncached:
-        new_vectors = model.encode(uncached, show_progress_bar=False, convert_to_tensor=False)
+        new_vectors = model.encode(uncached, show_progress_bar=False, convert_to_tensor=False, normalize_embeddings=False)
         for i, vec in enumerate(new_vectors):
             embedding_cache[uncached[i]] = vec
             results[uncached_indices[i]] = vec
 
     return np.array(results)
 
-def chunk_text_generator(text: str, size: int = 300, overlap: int = 50) -> Generator[str, None, None]:
+def chunk_text_generator(text: str, size: int = 100, overlap: int = 50) -> Generator[str, None, None]:
     words = text.split()
     if not words:
         return

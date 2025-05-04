@@ -4,7 +4,7 @@ from typing import List, Iterable, Dict, Any
 from cachetools import LRUCache
 
 class FAISSVectorStore:
-    def __init__(self, embedding_dim: int = 384, cache_size: int = 1024):
+    def __init__(self, embedding_dim: int = 768, cache_size: int = 1024):
         self.embedding_dim: int = embedding_dim
         try:
             self.index: faiss.Index = faiss.IndexFlatL2(embedding_dim)
@@ -33,7 +33,7 @@ class FAISSVectorStore:
         except Exception as e:
             print(f"Error during add: {e}")
 
-    def search(self, query_vector: np.ndarray, top_k: int = 5, **kwargs: Dict[str, Any]) -> List[str]:
+    def search(self, query_vector: np.ndarray, top_k: int = 2, **kwargs: Dict[str, Any]) -> List[str]:
         if not self.is_ready or self.index is None or self.index.ntotal == 0:
             return ["Index is not ready or is empty. Please try again later."]
 

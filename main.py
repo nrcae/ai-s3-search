@@ -3,12 +3,13 @@ from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from app.api import router
 from app.index_builder import start_background_indexing
+from app.shared_resources import vector_store
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Code to run before the application starts accepting requests
     print("INFO:     Lifespan startup: Initiating background indexing...")
-    start_background_indexing()
+    start_background_indexing(vector_store)
     print("INFO:     Lifespan startup: Background indexing thread started.")
 
     yield # The application runs while the context manager is active

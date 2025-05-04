@@ -2,6 +2,7 @@ import threading
 import concurrent.futures
 from typing import List, Generator
 from app.vectorstore import FAISSVectorStore
+from app.shared_resources import vector_store
 from app.s3_loader import fetch_pdf_files, extract_text_from_pdf
 from app.embedder import get_embeddings, chunk_text
 
@@ -25,8 +26,6 @@ except ImportError:
         def normalize_text_fallback(text: str) -> str:
             return text.strip().lower()
 
-vector_store = FAISSVectorStore()
-
 def process_pdfs_to_chunks(files: List[str], max_workers: int = 5) -> Generator[str, None, None]:
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         for text in executor.map(extract_text_from_pdf, files):
@@ -38,8 +37,11 @@ def process_pdfs_to_chunks(files: List[str], max_workers: int = 5) -> Generator[
                 except Exception as e:
                     print(f"Error chunking text: {e}")
 
-def optimized_batch_embedding(chunk_generator: Generator[str, None, None], batch_size: int):
-    global vector_store
+def optimized_batch_embedding(
+    chunk_generator: Generator[str, None, None],
+    batch_size: int,
+    vector_store: FAISSVectorStore
+):
     batch: List[str] = []
 
     for chunk in chunk_generator:
@@ -71,8 +73,12 @@ def optimized_batch_embedding(chunk_generator: Generator[str, None, None], batch
         except Exception as e:
             print(f"Error processing final batch: {e}")
 
-def build_index_background(batch_size: int = 2048, max_workers: int = 5):
-    global vector_store
+def build_index_background(
+    vector_store: FAISSVectorStore,
+    batch_size: int = 32,
+    max_workers: int = 5
+):
+
     initial_ready_state = vector_store.is_ready
 
     try:
@@ -84,7 +90,7 @@ def build_index_background(batch_size: int = 2048, max_workers: int = 5):
 
         print(f"Processing {len(files)} PDF files...")
         chunk_gen = process_pdfs_to_chunks(files, max_workers=max_workers)
-        optimized_batch_embedding(chunk_gen, batch_size)
+        optimized_batch_embedding(chunk_gen, batch_size, vector_store)
         if not vector_store.is_ready: vector_store.is_ready = True
 
     except Exception as e:
@@ -92,11 +98,11 @@ def build_index_background(batch_size: int = 2048, max_workers: int = 5):
         # Ensure store is marked ready if it failed and wasn't ready before
         if not initial_ready_state: vector_store.is_ready = True
 
-# --- Minimal Thread Starter (Essentially unchanged) ---
-def start_background_indexing():
+def start_background_indexing(vector_store_instance: FAISSVectorStore):
     print("Initiating background indexing thread...")
     thread = threading.Thread(
         target=build_index_background,
+        args=(vector_store_instance,),
         kwargs={'batch_size': 2048, 'max_workers': 5},
         daemon=True
     )

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Query
 import numpy as np
 from app.embedder import get_embeddings
-from app.index_builder import vector_store
+from app.shared_resources import vector_store
 
 router = APIRouter()
 

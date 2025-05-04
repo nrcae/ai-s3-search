@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 from typing import List, Generator
 from sentence_transformers import SentenceTransformer
 from app.config import EMBED_MODEL_NAME
@@ -12,7 +13,13 @@ def get_embeddings(texts: list[str]) -> np.ndarray:
     # Load the model only once (lazy loading)
     if model is None:
         print("Loading SentenceTransformer model...")
-        model = SentenceTransformer(EMBED_MODEL_NAME)
+        # Check if MPS is available and use it, otherwise fallback to CPU
+        if torch.backends.mps.is_available():
+            device = 'mps'
+        else:
+            device = 'cpu'
+        print(f"Embedder: Using device: {device} for model '{EMBED_MODEL_NAME}'")
+        model = SentenceTransformer(EMBED_MODEL_NAME, device=device)
         print("Model loaded.")
 
     results = []

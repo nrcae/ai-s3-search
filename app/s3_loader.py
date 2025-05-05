@@ -5,6 +5,15 @@ from botocore.exceptions import ClientError
 from PyPDF2 import PdfReader
 from typing import List, Dict, Any
 from app.config import AWS_ACCESS_KEY, AWS_SECRET_KEY, S3_BUCKET
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
 
 s3 = boto3.client(
     "s3",
@@ -13,7 +22,6 @@ s3 = boto3.client(
 )
 
 def fetch_page(bucket: str, prefix: str = '', continuation_token: str | None = None) -> Dict[str, Any]:
-    """Fetches a single page of objects from S3."""
     kwargs = {'Bucket': bucket, 'Prefix': prefix}
     if continuation_token:
         kwargs['ContinuationToken'] = continuation_token
@@ -21,11 +29,11 @@ def fetch_page(bucket: str, prefix: str = '', continuation_token: str | None = N
         response = s3.list_objects_v2(**kwargs)
         return response
     except Exception as e:
-        print(f"Error fetching S3 page (token: {continuation_token}): {e}")
+        logger.error(f" Fetching S3 page (token: {continuation_token}): {e}")
         return {} # Return empty dict on error to avoid breaking the loop
 
 def fetch_pdf_files(max_workers: int = 10) -> List[str]: # Added max_workers parameter
-    print(f"Fetching PDF file list from s3://{S3_BUCKET}/ concurrently (max_workers={max_workers})...")
+    logger.info(f" Fetching PDF file list from s3://{S3_BUCKET}/ concurrently (max_workers={max_workers})...")
     pdf_keys: List[str] = []
     tokens_to_fetch: List[str] = []
     s3_prefix = ''
@@ -42,7 +50,7 @@ def fetch_pdf_files(max_workers: int = 10) -> List[str]: # Added max_workers par
         is_truncated = response.get('IsTruncated', False)
         next_token = response.get('NextContinuationToken')
     except Exception as e:
-        print(f"Error fetching initial S3 page: {e}")
+        logger.error(f" Fetching initial S3 page: {e}")
         return []
 
     # 2. Sequentially collect all subsequent continuation tokens
@@ -55,11 +63,11 @@ def fetch_pdf_files(max_workers: int = 10) -> List[str]: # Added max_workers par
             is_truncated = response.get('IsTruncated', False)
             next_token = response.get('NextContinuationToken')
         except Exception as e:
-            print(f"Error fetching next continuation token ({next_token}): {e}")
+            logger.error(f" Fetching next continuation token ({next_token}): {e}")
             # Stop collecting tokens if an error occurs during pagination check
             break
 
-    print(f"Found {len(tokens_to_fetch)} additional pages to fetch concurrently.")
+    logger.debug(f" Found {len(tokens_to_fetch)} additional pages to fetch concurrently.")
 
     # 3. Fetch the remaining pages concurrently
     if tokens_to_fetch:
@@ -82,9 +90,9 @@ def fetch_pdf_files(max_workers: int = 10) -> List[str]: # Added max_workers par
                     ]
                     pdf_keys.extend(page_keys)
                 except Exception as exc:
-                    print(f'Fetching page with token {token} generated an exception: {exc}')
+                    logger.error(f" Fetching page with token {token} generated an exception: {exc}")
 
-    print(f"Found total {len(pdf_keys)} PDF files.")
+    logger.info(f" Found total {len(pdf_keys)} PDF files.")
     return pdf_keys
     
 def extract_text_from_pdf(s3_key: str) -> str:
@@ -106,6 +114,6 @@ def extract_text_from_pdf(s3_key: str) -> str:
     # Catch both specific S3 errors and general processing errors
     except (ClientError, Exception) as e:
         # Log the error for debugging
-        print(f"Error processing PDF '{s3_key}': {e}")
+        logger.error(f" Processing PDF '{s3_key}': {e}")
         # Return an empty string consistently on failure
         return ""

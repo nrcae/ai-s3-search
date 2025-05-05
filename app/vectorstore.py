@@ -3,16 +3,24 @@ import numpy as np
 from typing import List, Dict, Any, Tuple
 from cachetools import LRUCache
 import threading
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 class FAISSVectorStore:
     def __init__(self, embedding_dim: int = 768, cache_size: int = 1024):
         self.embedding_dim: int = embedding_dim
         try:
             self.index: faiss.Index = faiss.IndexFlatL2(embedding_dim)
-            print(f"Initialized Faiss IndexFlatL2 with dimension {embedding_dim}")
+            logger.debug(f" Initialized Faiss IndexFlatL2 with dimension {embedding_dim}")
         except Exception as e:
             self.index = None
-            print(f"Error initializing Faiss IndexFlatL2 with dim {embedding_dim}: {e}")
+            logger.error(f" Initializing Faiss IndexFlatL2 with dim {embedding_dim}: {e}")
             
         self.text_chunks: List[str] = []
         self.is_ready: bool = False
@@ -20,17 +28,17 @@ class FAISSVectorStore:
         self.cache_lock = threading.Lock()
 
     def add(self, vectors: np.ndarray, texts: List[str]):
-        if self.index is None: print("Error: Index not initialized."); return
+        if self.index is None: logger.error(" Index not initialized."); return
         try:
             vectors_np = np.ascontiguousarray(vectors.astype(np.float32))
             if vectors_np.shape[1] != self.embedding_dim:
-                 print(f"Error: Add vector dim {vectors_np.shape[1]} != index dim {self.embedding_dim}.")
+                 logger.error(f" Add vector dim {vectors_np.shape[1]} != index dim {self.embedding_dim}.")
                  return
             self.index.add(vectors_np)
             self.text_chunks.extend(texts)
             self.is_ready = True # Mark ready after first add
             with self.cache_lock: self.cache.clear()
-        except Exception as e: print(f"Error during add: {e}")
+        except Exception as e: logger.error(f" During add: {e}")
 
 
     def search(self, query_vector: np.ndarray, top_k: int = 2, **kwargs: Dict[str, Any]) -> List[Tuple[float, str]]:
@@ -46,10 +54,10 @@ class FAISSVectorStore:
             if query_vector.ndim == 1: query_vector = query_vector.reshape(1, -1)
 
             if query_vector.shape[1] != self.embedding_dim:
-                print(f"Error: Query vector dim {query_vector.shape[1]} != index dim {self.embedding_dim}.")
+                logger.error(f" Query vector dim {query_vector.shape[1]} != index dim {self.embedding_dim}.")
                 return []
         except Exception as e:
-            print(f"Error processing query vector: {e}")
+            logger.error(f" Processing query vector: {e}")
             return []
 
         # 3. Cache Key Logic (Kept for correctness if kwargs used)
@@ -57,7 +65,7 @@ class FAISSVectorStore:
         try:
             cache_key = (query_vector.tobytes(), top_k, tuple(sorted(kwargs.items())))
         except Exception as e:
-            print(f"Warning: Could not create cache key ({e}).")
+            logger.warning(f" Could not create cache key ({e}).")
 
         # 4. Cache Check
         if cache_key: # Check if key creation succeeded
@@ -79,7 +87,7 @@ class FAISSVectorStore:
             ] if indices.size > 0 else []
 
         except Exception as e:
-            print(f"An error occurred during search/result assembly: {e}")
+            logger.error(f" An error occurred during search/result assembly: {e}")
             return []
 
         # 7. Store in Cache

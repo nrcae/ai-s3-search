@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Query, HTTPException
-import numpy as np
 from typing import List, Tuple, Dict, Any
 from app.embedder import get_embeddings
 from app.shared_resources import vector_store

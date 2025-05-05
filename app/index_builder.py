@@ -2,25 +2,32 @@ import threading
 import concurrent.futures
 from typing import List, Generator
 from app.vectorstore import FAISSVectorStore
-from app.shared_resources import vector_store
 from app.s3_loader import fetch_pdf_files, extract_text_from_pdf
 from app.embedder import get_embeddings, chunk_text
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 # Attempt to import the BATCH function first
 try:
     from text_normalizer import normalize_text_batch as normalize_text_batch_rust
-    print("INFO:     Using Rust 'normalize_text_batch' function.")
+    logger.debug(" Using Rust 'normalize_text_batch' function.")
     use_rust_batch = True
 except ImportError:
-    print("WARNING:  Rust batch function 'normalize_text_batch' not found. Will attempt single normalization.")
+    logger.debug(" Rust batch function 'normalize_text_batch' not found. Will attempt single normalization.")
     use_rust_batch = False
     # If batch fails, try importing the SINGLE function
     try:
         from text_normalizer import normalize_text as normalize_text_rust
-        print("INFO:     Using Rust 'normalize_text' function.")
+        logger.debug(" Using Rust 'normalize_text' function.")
         use_rust_single = True
     except ImportError:
-        print("WARNING:  Rust single function 'normalize_text' not found. Using Python fallback.")
+        logger.warning(" Rust single function 'normalize_text' not found. Using Python fallback.")
         use_rust_single = False
         # Minimal Python fallback implementation if both Rust imports fail
         def normalize_text_fallback(text: str) -> str:
@@ -35,7 +42,7 @@ def process_pdfs_to_chunks(files: List[str], max_workers: int = 5) -> Generator[
                     for chunk in chunk_text(text):
                         yield chunk
                 except Exception as e:
-                    print(f"Error chunking text: {e}")
+                    logger.error(f" Chunking text: {e}")
 
 def optimized_batch_embedding(
     chunk_generator: Generator[str, None, None],
@@ -56,7 +63,7 @@ def optimized_batch_embedding(
                 vectors = get_embeddings(batch)
                 vector_store.add(vectors, batch) # Assumes add sets is_ready eventually
             except Exception as e:
-                print(f"Error processing batch: {e}")
+                logger.debug(f" Processing batch: {e}")
             finally:
                  batch.clear()
 
@@ -71,7 +78,7 @@ def optimized_batch_embedding(
             vectors = get_embeddings(normalized_batch)
             vector_store.add(vectors, normalized_batch)
         except Exception as e:
-            print(f"Error processing final batch: {e}")
+            logger.debug(f" Processing final batch: {e}")
 
 def build_index_background(
     vector_store: FAISSVectorStore,
@@ -84,22 +91,22 @@ def build_index_background(
     try:
         files = fetch_pdf_files()
         if not files:
-            print("No PDF files found.")
+            logger.error(" No PDF files found.")
             if not initial_ready_state: vector_store.is_ready = True # Mark ready if empty & wasn't ready
             return
 
-        print(f"Processing {len(files)} PDF files...")
+        logger.info(f" Processing {len(files)} PDF files...")
         chunk_gen = process_pdfs_to_chunks(files, max_workers=max_workers)
         optimized_batch_embedding(chunk_gen, batch_size, vector_store)
         if not vector_store.is_ready: vector_store.is_ready = True
 
     except Exception as e:
-        print(f"CRITICAL ERROR during indexing: {e}")
+        logger.critical(f" CRITICAL ERROR during indexing: {e}")
         # Ensure store is marked ready if it failed and wasn't ready before
         if not initial_ready_state: vector_store.is_ready = True
 
 def start_background_indexing(vector_store_instance: FAISSVectorStore):
-    print("Initiating background indexing thread...")
+    logger.debug(" Initiating background indexing thread...")
     thread = threading.Thread(
         target=build_index_background,
         args=(vector_store_instance,),

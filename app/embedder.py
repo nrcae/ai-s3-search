@@ -1,8 +1,16 @@
 import numpy as np
 import torch
+import logging
 from typing import List, Generator
 from sentence_transformers import SentenceTransformer
 from app.config import EMBED_MODEL_NAME
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 model = None
 embedding_cache = {}
@@ -12,15 +20,15 @@ def get_embeddings(texts: list[str]) -> np.ndarray:
 
     # Load the model only once (lazy loading)
     if model is None:
-        print("Loading SentenceTransformer model...")
+        logger.info(" Loading SentenceTransformer model...")
         # Check if MPS is available and use it, otherwise fallback to CPU
         if torch.backends.mps.is_available():
             device = 'mps'
         else:
             device = 'cpu'
-        print(f"Embedder: Using device: {device} for model '{EMBED_MODEL_NAME}'")
+        logger.debug(f" Embedder: Using device: {device} for model '{EMBED_MODEL_NAME}'")
         model = SentenceTransformer(EMBED_MODEL_NAME, device=device)
-        print("Model loaded.")
+        logger.info(" Model loaded.")
 
     results = []
     uncached = []

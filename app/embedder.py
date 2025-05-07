@@ -65,16 +65,33 @@ def get_embeddings(texts: list[str]) -> np.ndarray:
     return np.array(results)
 
 def chunk_text_generator(text: str, size: int = 100, overlap: int = 50) -> Generator[str, None, None]:
+
+    # Validate parameters to ensure meaningful operation and prevent infinite loops
+    if not isinstance(text, str):
+        raise TypeError("Input 'text' must be a string.")
+    if not isinstance(size, int) or not isinstance(overlap, int):
+        raise TypeError("'size' and 'overlap' must be integers.")
+
+    if size <= 0:
+        raise ValueError("Chunk size must be positive.")
+    if overlap < 0:
+        raise ValueError("Overlap cannot be negative.")
+    # This is crucial: if size <= overlap, step is <= 0, leading to issues.
+    if size <= overlap:
+        raise ValueError("Chunk size must be strictly greater than overlap to ensure progress.")
+
     words = text.split()
     if not words:
         return
 
     start = 0
+    step = size - overlap
     while start < len(words):
         end = min(start + size, len(words))
         chunk = " ".join(words[start:end])
         yield chunk
-        start += (size - overlap)
+        start += step
+        # No need to check 'if step <=0: break' here because 'size <= overlap' check ensures step > 0
 
-def chunk_text(text: str, size: int = 300, overlap: int = 50) -> List[str]:
+def chunk_text(text: str, size: int = 100, overlap: int = 50) -> List[str]:
     return list(chunk_text_generator(text, size, overlap))

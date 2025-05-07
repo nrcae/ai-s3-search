@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const loader = document.getElementById('loader');
     const currentYearSpan = document.getElementById('currentYear');
 
+
     if (currentYearSpan) {
         currentYearSpan.textContent = new Date().getFullYear();
     }
@@ -38,6 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
     searchForm.addEventListener('submit', async function(event) {
         event.preventDefault();
         const query = queryInput.value.trim();
+        
         if (!query) {
             resultsDiv.innerHTML = '<p class="message error">Please enter a search query.</p>';
             return;
@@ -47,7 +49,9 @@ document.addEventListener('DOMContentLoaded', () => {
         loader.style.display = 'block';
 
         try {
-            const response = await fetch(`/search?q=${encodeURIComponent(query)}&top_k=5`);
+            const topK = document.querySelector('#topK').value || '5';
+            const currentQuery = document.getElementById('query').value.trim();
+            const response = await fetch(`/search?q=${encodeURIComponent(currentQuery)}&top_k=${topK}`);
             loader.style.display = 'none';
 
             if (response.status === 503) {
@@ -65,6 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const data = await response.json();
             if (data.results && data.results.length > 0) {
+                data.results.sort((a, b) => b[0] - a[0]);
                 let html = '<h3>Results:</h3>';
                 data.results.forEach(item => {
                     const score = item[0];
@@ -72,7 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const escapedText = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
                     html += `
                         <div class="result-item">
-                            <p><strong>Score:</strong> ${score.toFixed(4)}</p>
+                            <p><strong>Score:</strong> ${score}</p>
                             <p>${escapedText}</p>
                         </div>
                     `;

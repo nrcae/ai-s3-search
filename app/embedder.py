@@ -18,38 +18,50 @@ embedding_cache = {}
 def get_embeddings(texts: list[str]) -> np.ndarray:
     global model, embedding_cache
 
-    # Load the model only once (lazy loading)
+    # Lazy load the model only once
     if model is None:
-        logger.info(" Loading SentenceTransformer model...")
-        # Check if MPS is available and use it, otherwise fallback to CPU
+        logger.info("Loading SentenceTransformer model...")
+        # Check if MPS (Apple Silicon GPU) is available, otherwise fallback to CPU
         if torch.backends.mps.is_available():
             device = 'mps'
         else:
             device = 'cpu'
-        logger.debug(f" Embedder: Using device: {device} for model '{EMBED_MODEL_NAME}'")
+        logger.debug(f"Embedder: Using device: '{device}' for model '{EMBED_MODEL_NAME}'")
         model = SentenceTransformer(EMBED_MODEL_NAME, device=device)
-        logger.info(" Model loaded.")
+        logger.info("Model loaded.")
 
-    results = []
-    uncached = []
-    uncached_indices = []
+    num_texts = len(texts)
+    results = [None] * num_texts
 
-    # Check cache for each text
+    texts_to_encode_map = {} # texts_to_encode_map: maps a unique text string to a list of its original indices in the input `texts`
+    unique_texts_for_model_input = [] # unique_texts_for_model_input: a list of unique text strings that are not in cache and need encoding
+
     for idx, text in enumerate(texts):
-        if text in embedding_cache:
-            results.append(embedding_cache[text])
+        cached_embedding = embedding_cache.get(text)
+        if cached_embedding is not None:
+            results[idx] = cached_embedding
         else:
-            results.append(None)
-            uncached.append(text)
-            uncached_indices.append(idx)
+            # If this text is encountered for the first time among uncached texts in this call
+            if text not in texts_to_encode_map:
+                unique_texts_for_model_input.append(text)
+            # Record the original index for this text
+            texts_to_encode_map.setdefault(text, []).append(idx)
 
-    # Encode only uncached texts
-    if uncached:
-        new_vectors = model.encode(uncached, show_progress_bar=False, convert_to_tensor=False, normalize_embeddings=False)
-        for i, vec in enumerate(new_vectors):
-            embedding_cache[uncached[i]] = vec
-            results[uncached_indices[i]] = vec
-
+    if unique_texts_for_model_input:
+        logger.debug(f"Encoding {len(unique_texts_for_model_input)} unique uncached texts.")
+        new_vectors = model.encode(
+            unique_texts_for_model_input,
+            show_progress_bar=False,
+            convert_to_tensor=False,
+            normalize_embeddings=False
+        )
+        for i, text_encoded in enumerate(unique_texts_for_model_input):
+            vector = new_vectors[i]
+            embedding_cache[text_encoded] = vector
+            # Results for all original occurrences of this text
+            for original_idx in texts_to_encode_map[text_encoded]:
+                results[original_idx] = vector
+    
     return np.array(results)
 
 def chunk_text_generator(text: str, size: int = 100, overlap: int = 50) -> Generator[str, None, None]:

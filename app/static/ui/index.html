@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI S3 Search</title>
+    <link rel="stylesheet" href="/static/ui/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="page-container">
+        <main class="container">
+            <!-- Header will be in the first grid column -->
+            <header>
+                <h1>AI S3 Search</h1>
+                <div class="project-info">
+                    <p>Unlock insights from your S3 data with neural-powered search. Fast, precise, and scalable discovery for your documents.</p>
+                </div>
+                <div id="status" class="status-bar">Checking status...</div>
+            </header>
+
+            <!-- Search form will be in the first grid column -->
+            <form id="searchForm" class="search-form">
+                <input type="text" id="query" placeholder="Enter your search query..." autofocus>
+                <button type="submit"><i class="fas fa-search"></i></button>
+            </form>
+
+            <!-- Search progress/loader will be in the first grid column -->
+            <div class="search-progress">
+                <div id="loader" class="loader"></div>
+            </div>
+
+            <!-- Results container will be in the second grid column -->
+            <div class="results-container">
+                <div id="results">
+                    <!-- Search results will be dynamically inserted here -->
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>&copy; <span id="currentYear"></span> AI S3 Search Engine</p>
+        </footer>
+    </div>
+
+    <script src="/static/ui/script.js"></script>
+</body>
+</html>

@@ -32,7 +32,7 @@ def fetch_page(bucket: str, prefix: str = '', continuation_token: str | None = N
         logger.error(f" Fetching S3 page (token: {continuation_token}): {e}")
         return {} # Return empty dict on error to avoid breaking the loop
 
-def fetch_pdf_files(max_workers: int = 10) -> List[str]: # Added max_workers parameter
+def fetch_pdf_files(max_workers: int = 20) -> List[str]:
     logger.info(f" Fetching PDF file list from s3://{S3_BUCKET}/ concurrently (max_workers={max_workers})...")
     pdf_keys: List[str] = []
     tokens_to_fetch: List[str] = []
@@ -60,6 +60,8 @@ def fetch_pdf_files(max_workers: int = 10) -> List[str]: # Added max_workers par
         try:
             # We only need the token here, so a quick request is okay
             response = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix=s3_prefix, ContinuationToken=next_token)
+            if response['KeyCount'] == 0:
+                return []
             is_truncated = response.get('IsTruncated', False)
             next_token = response.get('NextContinuationToken')
         except Exception as e:

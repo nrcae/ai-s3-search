@@ -86,6 +86,17 @@ class FAISSVectorStore:
                 if 0 <= idx < len(self.text_chunks)
             ] if indices.size > 0 else []
 
+            if results:
+                scores = [score for score, _ in results]
+                min_score = min(scores)
+                max_score = max(scores)
+                if max_score > min_score:
+                    # Normalize in-place for just the results shown
+                    results = [((score - min_score) / (max_score - min_score), text) for score, text in results]
+                else:
+                    results = [(1.0, text) for _, text in results]
+
+
         except Exception as e:
             logger.error(f" An error occurred during search/result assembly: {e}")
             return []

@@ -1,7 +1,7 @@
 import threading
 import concurrent.futures
 from typing import List, Generator
-from app.vectorstore import FAISSVectorStore
+from app.vectorstore import LanceDBVectorStore
 from app.s3_loader import fetch_pdf_files, extract_text_from_pdf
 from app.embedder import get_embeddings, chunk_text
 import logging
@@ -47,7 +47,7 @@ def process_pdfs_to_chunks(files: List[str], max_workers: int = 5) -> Generator[
 def optimized_batch_embedding(
     chunk_generator: Generator[str, None, None],
     batch_size: int,
-    vector_store: FAISSVectorStore
+    vector_store: LanceDBVectorStore
 ):
     batch: List[str] = []
 
@@ -81,7 +81,7 @@ def optimized_batch_embedding(
             logger.debug(f" Processing final batch: {e}")
 
 def build_index_background(
-    vector_store: FAISSVectorStore,
+    vector_store: LanceDBVectorStore,
     batch_size: int = 32,
     max_workers: int = 5
 ):
@@ -105,7 +105,7 @@ def build_index_background(
         # Ensure store is marked ready if it failed and wasn't ready before
         if not initial_ready_state: vector_store.is_ready = True
 
-def start_background_indexing(vector_store_instance: FAISSVectorStore):
+def start_background_indexing(vector_store_instance: LanceDBVectorStore):
     logger.debug(" Initiating background indexing thread...")
     thread = threading.Thread(
         target=build_index_background,

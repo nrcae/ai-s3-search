@@ -1,2 +1,2 @@
-from app.vectorstore import FAISSVectorStore
-vector_store = FAISSVectorStore(embedding_dim=768)
+from app.vectorstore import LanceDBVectorStore
+vector_store = LanceDBVectorStore(embedding_dim=768)

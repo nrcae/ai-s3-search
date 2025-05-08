@@ -38,4 +38,8 @@ async def search_minimal(
 
 @router.get("/status")
 def status():
-    return {"index_ready": vector_store.is_ready, "index_size": vector_store.index.ntotal}
+    return {
+        "index_ready": vector_store.is_ready,
+        "index_size": len(vector_store.text_chunks)  # Use text_chunks length instead
+    }
+

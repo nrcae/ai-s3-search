@@ -4,3 +4,4 @@ node_modules/
 __pycache__
 text_normalizer/target
 text_normalizer/Cargo.lock
+lancedb_data

@@ -96,7 +96,6 @@ class FAISSVectorStore:
                 else:
                     results = [(1.0, text) for _, text in results]
 
-
         except Exception as e:
             logger.error(f" An error occurred during search/result assembly: {e}")
             return []

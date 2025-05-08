@@ -77,7 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const escapedText = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
                     html += `
                         <div class="result-item">
-                            <p><strong>Score:</strong> ${score}</p>
+                            <p><strong>Score:</strong> ${score.toFixed(4)}</p>
                             <p>${escapedText}</p>
                         </div>
                     `;

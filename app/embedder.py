@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import logging
+import re
 from typing import List, Generator
 from sentence_transformers import SentenceTransformer
 from app.config import EMBED_MODEL_NAME
@@ -64,34 +65,30 @@ def get_embeddings(texts: list[str]) -> np.ndarray:
     
     return np.array(results)
 
-def chunk_text_generator(text: str, size: int = 100, overlap: int = 50) -> Generator[str, None, None]:
+def chunk_text_generator(text: str, size: int=500, overlap: int=200) -> Generator[str, None, None]:
+    sentences = re.split(r'(?<=[.!?])\s+', text)  # Split at sentence endings
+    
+    current_chunk = []
+    current_length = 0
+    overlap_buffer = []
+    
+    for sentence in sentences:
+        sentence_word_count = len(sentence.split())
+        
+        if current_length + sentence_word_count > size:
+            # Yield current chunk
+            yield ' '.join(current_chunk)
+            
+            # Retain overlap as full sentences
+            overlap_buffer = current_chunk[-int(overlap/10):]  # Keep last 15 sentences (if overlap=150)
+            current_chunk = overlap_buffer.copy()
+            current_length = sum(len(s.split()) for s in current_chunk)
+        
+        current_chunk.append(sentence)
+        current_length += sentence_word_count
+    
+    if current_chunk:
+        yield ' '.join(current_chunk)
 
-    # Validate parameters to ensure meaningful operation and prevent infinite loops
-    if not isinstance(text, str):
-        raise TypeError("Input 'text' must be a string.")
-    if not isinstance(size, int) or not isinstance(overlap, int):
-        raise TypeError("'size' and 'overlap' must be integers.")
-
-    if size <= 0:
-        raise ValueError("Chunk size must be positive.")
-    if overlap < 0:
-        raise ValueError("Overlap cannot be negative.")
-    # This is crucial: if size <= overlap, step is <= 0, leading to issues.
-    if size <= overlap:
-        raise ValueError("Chunk size must be strictly greater than overlap to ensure progress.")
-
-    words = text.split()
-    if not words:
-        return
-
-    start = 0
-    step = size - overlap
-    while start < len(words):
-        end = min(start + size, len(words))
-        chunk = " ".join(words[start:end])
-        yield chunk
-        start += step
-        # No need to check 'if step <=0: break' here because 'size <= overlap' check ensures step > 0
-
-def chunk_text(text: str, size: int = 100, overlap: int = 50) -> List[str]:
+def chunk_text(text: str, size: int = 500, overlap: int = 200) -> List[str]:
     return list(chunk_text_generator(text, size, overlap))

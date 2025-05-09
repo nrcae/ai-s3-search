@@ -1,10 +1,11 @@
 import lancedb
-import numpy as np
 import uuid
 import logging
-from typing import List, Tuple
-from cachetools import LRUCache
 import threading
+import numpy as np
+import pyarrow as pa
+from typing import List, Tuple, Annotated, Optional
+from cachetools import LRUCache
 from lancedb.pydantic import Vector, LanceModel
 
 logging.basicConfig(
@@ -14,59 +15,70 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
-from lancedb.pydantic import LanceModel, Vector
-from typing import Optional
-
 class LanceDBVectorStore:
     def __init__(self, embedding_dim: int = 768, cache_size: int = 1024):
         self.embedding_dim = embedding_dim
         self.db = lancedb.connect("./lancedb_data")
-        
-        # Define schema as instance attribute
-        self.Schema = self.create_schema(embedding_dim)
-        
+
+        self.PydanticSchema = self.create_pydantic_schema(embedding_dim)
+
+        # Define the explicit Arrow schema
+        self.arrow_schema = pa.schema([
+            pa.field("id", pa.string(), nullable=False),
+            pa.field("vector", pa.list_(pa.float32(), self.embedding_dim), nullable=False),
+            pa.field("text", pa.string(), nullable=False)
+        ])
+
         self.table: Optional[lancedb.table.Table] = None
         self.text_chunks: List[str] = []
         self.is_ready: bool = False
         self.cache = LRUCache(maxsize=cache_size)
         self.cache_lock = threading.Lock()
 
-    def create_schema(self, dim: int) -> type[LanceModel]:
-        """Dynamically create schema class with proper dimension"""
+    def create_pydantic_schema(self, dim: int) -> type[LanceModel]:
         class VectorSchema(LanceModel):
             id: str
-            vector: Vector(dim)
+            vector: Annotated[List[float], Vector(dim)]
             text: str
         return VectorSchema
 
     def add(self, vectors: np.ndarray, texts: List[str]):
         try:
+            # Ensure input vectors are float32
             vectors_np = np.ascontiguousarray(vectors.astype(np.float32))
-            
-            # Use the instance's schema class
-            data = [self.Schema(
+
+            # Prepare data using Pydantic models for structure.
+            # When vector.tolist() is called, np.float32 becomes Python float (64-bit).
+            # LanceDB will convert these to Arrow Float32 during ingestion
+            # because the table's schema (self.arrow_schema) dictates it.
+            data_pydantic_models = [self.PydanticSchema(
                 id=str(uuid.uuid4()),
                 vector=vector.tolist(),
                 text=text
             ) for vector, text in zip(vectors_np, texts)]
 
+            if not data_pydantic_models:
+                logger.warning("No data to add after Pydantic model preparation.")
+                return
+
             if self.table is None:
+                # Step 3: Use the explicit self.arrow_schema for table creation
                 self.table = self.db.create_table(
                     "vectors",
-                    data=data,
-                    schema=self.Schema,  # Explicit schema
+                    schema=self.arrow_schema,
                     mode="overwrite",
                     exist_ok=True
                 )
+                # Add data (list of Pydantic models). LanceDB converts based on table's Arrow schema.
+                self.table.add(data_pydantic_models)
             else:
-                self.table.add(data)
+                # Table already exists, assume its schema is correct or was previously corrected.
+                self.table.add(data_pydantic_models)
 
-            self.text_chunks.extend(texts)
+            self.text_chunks.extend([item.text for item in data_pydantic_models])
             self.is_ready = True
             with self.cache_lock:
                 self.cache.clear()
-
         except Exception as e:
             logger.error(f"Error adding vectors: {e}")
             self.is_ready = False
@@ -76,43 +88,49 @@ class LanceDBVectorStore:
             return []
 
         try:
-            query_vector = np.ascontiguousarray(query_vector.astype(np.float32))
-            if query_vector.ndim == 1:
-                query_vector = query_vector.reshape(1, -1)
+            # Ensure query vector is 1D float32 numpy array
+            query_vector_np = np.ascontiguousarray(query_vector.astype(np.float32))
+            if query_vector_np.ndim == 2 and query_vector_np.shape[0] == 1:
+                query_vector_np = query_vector_np.flatten()
+            elif query_vector_np.ndim != 1: # Check if it's not already 1D
+                logger.error(f"Query vector has incorrect shape: {query_vector_np.shape}, must be 1D or (1, D).")
+                return []
+            
+            if query_vector_np.shape[0] != self.embedding_dim:
+                 logger.error(f"Query vector dimension {query_vector_np.shape[0]} does not match table dimension {self.embedding_dim}")
+                 return []
 
-            # Check cache
-            cache_key = (query_vector.tobytes(), top_k)
+
+            cache_key = (query_vector_np.tobytes(), top_k)
             with self.cache_lock:
                 if cache_key in self.cache:
                     return self.cache[cache_key]
 
-            # Perform search
-            results = self.table.search(query_vector).limit(top_k).to_list()
-            
-            # Convert L2 distances to similarities
+            # Perform search, ensuring vector_column_name is specified
+            results_df = self.table.search(
+                query_vector_np,
+                vector_column_name="vector"
+            ).limit(top_k).to_df()
+
             processed = []
-            for result in results:
-                try:
-                    score = 1 / (1 + result["_distance"])  # L2 to similarity
-                    processed.append((score, result["text"]))
-                except KeyError:
-                    continue
+            for _, row in results_df.iterrows():
+                score = 1 / (1 + row["_distance"]) # L2 to similarity
+                processed.append((score, row["text"]))
 
             # Normalize scores
             if processed:
-                scores = [s for s, _ in processed]
-                min_score, max_score = min(scores), max(scores)
-                if max_score > min_score:
-                    processed = [((s - min_score)/(max_score - min_score), t) 
+                scores_only = [s for s, _ in processed] # Corrected to scores_only
+                min_score, max_score = min(scores_only), max(scores_only)
+                if (max_score - min_score) > 1e-9: # Avoid division by zero
+                    processed = [((s - min_score)/(max_score - min_score), t)
                                 for s, t in processed]
-                else:
+                else: # All scores are the same
                     processed = [(1.0, t) for _, t in processed]
 
-            # Update cache
             with self.cache_lock:
                 self.cache[cache_key] = processed
 
-            return processed[:top_k]
+            return processed
 
         except Exception as e:
             logger.error(f"Search error: {e}")

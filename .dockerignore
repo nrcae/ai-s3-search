@@ -1,47 +1,24 @@
-# .dockerignore
-
-# Python cache files
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-
-# Virtual environment
-.venv
-venv
-env
-ENV
-
-# Build artifacts
-build/
-dist/
-*.egg-info
-
-# Git files
-.git
-.gitignore
-
-# Docker files
-Dockerfile
-.dockerignore
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# IDE files
-.idea/
-.vscode/
-
-# Secrets / Environment files
+.pytest_cache/
+.coverage
 .env
 *.env
-
-# Local data / caches (if any, besides the model cache handled by library)
-data/
-*.log
-
-# Rust module entries
+.git/
+.gitignore
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+build/
+dist/
+*.egg-info/
+venv/
+*.venv/
+lancedb_data/
+wheels/
+.cache/
 text_normalizer/target/
 text_normalizer/Cargo.lock
-

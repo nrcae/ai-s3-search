@@ -1,49 +1,91 @@
-# Dockerfile
+# Builds the Rust text_normalizer extension into a wheel.
+FROM python:3.12-slim AS rust-builder
 
-# 1. Use an official Python runtime
-FROM python:3.12-slim
-
-# 2. Set environment variables for Python and Rust
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
 ENV CARGO_HOME="/usr/local/cargo"
 ENV RUSTUP_HOME="/usr/local/rustup"
 ENV PATH="/usr/local/cargo/bin:${PATH}"
 
-# 3. Set the working directory *inside the container*
-WORKDIR /app
-
-# 4. Install base system dependencies + Rust toolchain
+# Install curl to get Rust, pip for Maturin, AND build-essential for the C linker (cc/gcc)
 RUN apt-get update && \
-    apt-get install -y curl build-essential pkg-config libssl-dev && \
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable && \
-    apt-get clean && \
+    apt-get install -y --no-install-recommends curl python3-pip python3-setuptools python3-wheel build-essential && \
     rm -rf /var/lib/apt/lists/*
 
-# 5. Install Python build tools
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+# Install Rust toolchain
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
 
-# 6. Install Python dependencies, including Maturin
-COPY ./requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+# Install Maturin
+RUN pip install --no-cache-dir maturin
 
-# 7. Build the Rust extension using Maturin
-COPY ./text_normalizer /app/text_normalizer
-RUN maturin build --release --manifest-path /app/text_normalizer/Cargo.toml --out /wheels
+WORKDIR /build_rust
+COPY ./text_normalizer /build_rust/text_normalizer
 
-# 8. Install the *just built* Rust wheel
-RUN pip install --no-cache-dir /wheels/*.whl && \
-    rm -rf /wheels # Clean up the temporary wheel directory
+# Build the Rust wheel
+RUN maturin build --release --manifest-path /build_rust/text_normalizer/Cargo.toml --out /dist_wheels
 
-# 9. Download/Cache Sentence Transformer model
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
+# Stage 2: Python Venv Builder
+FROM python:3.12-slim AS python-venv-builder
 
-# 10. Copy application code
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV VENV_PATH=/opt/venv
+
+# Create a virtual environment
+RUN python -m venv $VENV_PATH
+ENV PATH="$VENV_PATH/bin:$PATH"
+
+# Install build dependencies if any Python packages need C compilation
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc build-essential pkg-config libssl-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# Upgrade pip in venv
+RUN pip install --no-cache-dir --upgrade pip
+
+# Install CPU-only PyTorch first if it's a large dependency from sentence-transformers
+RUN pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+# Copy and install Python dependencies from requirements.txt
+COPY ./requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
+
+# Copy and install the Rust wheel from the rust-builder stage
+COPY --from=rust-builder /dist_wheels /tmp/dist_wheels
+RUN pip install --no-cache-dir /tmp/dist_wheels/*.whl && \
+    rm -rf /tmp/dist_wheels
+
+# Final Runtime Image
+FROM python:3.12-slim AS final
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV VENV_PATH=/opt/venv
+
+# Copy the virtual environment from the python-venv-builder stage
+COPY --from=python-venv-builder $VENV_PATH $VENV_PATH
+
+# Create a non-root user and group
+RUN groupadd --gid 1001 appuser && \
+    useradd --uid 1001 --gid 1001 -ms /bin/bash appuser
+
+WORKDIR /app
+
+# Copy application code
 COPY ./main.py /app/main.py
 COPY ./app /app/app
 
-# 11. Expose the application port
+# Create the lancedb_data directory and set its ownership to appuser
+# This must be done BEFORE switching to the non-root user.
+RUN mkdir /app/lancedb_data && \
+    chown appuser:appuser /app/lancedb_data
+
+# Switch to the non-root user
+USER appuser
+
+# Add venv to PATH
+ENV PATH="$VENV_PATH/bin:$PATH"
+
+# Expose the application port
 EXPOSE 8000
 
-# 12. Define the command to run the application
+# Define the command to run the application
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

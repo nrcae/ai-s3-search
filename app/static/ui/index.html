@@ -10,7 +10,6 @@
 <body>
     <div class="page-container">
         <main class="container">
-            <!-- Header will be in the first grid column -->
             <header>
                 <h1>AI S3 Search</h1>
                 <div class="project-info">
@@ -34,12 +33,9 @@
                 <button type="submit"><i class="fas fa-search"></i></button>
             </form>
 
-            <!-- Results container will be in the second grid column -->
             <div class="results-container">
                 <div id="results">
-                    <!-- Search results will be dynamically inserted here -->
                 </div>
-                <!-- Search progress/loader will be in the first grid column -->
                 <div class="search-progress">
                     <div id="loader" class="loader"></div>
                 </div>
@@ -51,6 +47,6 @@
         </footer>
     </div>
 
-    <script src="/static/ui/script.js"></script>
+    <script src="/static/ui/script.js" defer></script>
 </body>
 </html>

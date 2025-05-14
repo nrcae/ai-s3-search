@@ -25,9 +25,9 @@
     --box-shadow: 0 1px 0px rgba(255, 255, 255, 0.04), 0px 3px 8px rgba(0, 0, 0, 0.25);
     --input-height: 50px;
     --footer-height-calc: 40px;
-    --page-vertical-padding-calc: 3em; /* Sum of top and bottom page padding */
-    --search-form-total-height-calc: calc(var(--input-height) + 0.75em); /* Height + margin-bottom */
-    --search-progress-total-height-calc: calc(24px + 0.75em); /* Loader height + margin-bottom */
+    --page-vertical-padding-calc: 3em;
+    --search-form-total-height-calc: calc(var(--input-height) + 0.75em);
+    --search-progress-total-height-calc: calc(24px + 0.75em);
 }
 
 * {
@@ -72,9 +72,6 @@ main.container {
     width: 100%;
     max-width: 1440px;
     margin: auto auto;
-    background-color: transparent;
-    box-shadow: none;
-    border: none;
     flex-grow: 1;
     overflow: hidden;
 }
@@ -83,15 +80,12 @@ header {
     grid-column: 1 / 2;
     align-self: start;
     background-color: var(--surface-color);
-    color: var(--text-color);
     padding: 1.5em;
-    text-align: left;
     width: 100%;
     max-width: none;
     border-radius: var(--border-radius);
     border: 1px solid var(--border-color);
     box-shadow: var(--box-shadow);
-    max-height: auto; /* calc(100vh - var(--page-vertical-padding-calc) - var(--footer-height-calc) - 1.5em); /* 1.5em footer margin-top */
     overflow-y: auto;
 }
 
@@ -100,12 +94,10 @@ header h1 {
     font-weight: 600;
     font-size: 2em;
     letter-spacing: -0.02em;
-    text-align: left;
 }
 
 .project-info {
     margin-bottom: 1.5em;
-    text-align: left;
 }
 
 .project-info p{
@@ -113,7 +105,6 @@ header h1 {
     color: var(--text-secondary-color);
     line-height: 1.5;
     max-width: 95%;
-    text-align: left;
 }
 
 .status-bar {
@@ -137,7 +128,7 @@ header h1 {
     display: flex;
     align-items: center;
     width: 100%;
-    background-color: transparent;
+    background-color: var(--surface-color);
     gap: 0.5em;
 }
 
@@ -148,7 +139,6 @@ header h1 {
     border-radius: var(--border-radius);
     font-size: 0.9em;
     background-color: var(--input-bg-color);
-    color: var(--text-color);
     outline: none;
     transition: box-shadow 0.2s ease-in-out, background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
     height: var(--input-height);
@@ -185,7 +175,6 @@ header h1 {
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius);
     background-color: var(--input-bg-color);
-    color: var(--text-color);
     font-size: 1em;
     padding: 0 2.2em 0 1em;
     cursor: pointer;
@@ -196,7 +185,7 @@ header h1 {
     appearance: none;
     -webkit-appearance: none;
     -moz-appearance: none;
-    text-align: center; /* Center selected value */
+    text-align: center;
     background-image: url('data:image/svg+xml;utf8,<svg fill="gray" height="16" viewBox="0 0 20 20" width="16" xmlns="http://www.w3.org/2000/svg"><path d="M7 7l3 3 3-3" stroke="gray" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>');
     background-repeat: no-repeat;
     background-position: right 0.8em center;
@@ -204,17 +193,16 @@ header h1 {
 }
 
 #topK option {
-    color: var(--text-color); /* Style for actual options */
     text-align: center;
 }
 
 #topK option[disabled] {
-    color: var(--text-secondary-color); /* Placeholder color */
-    display: none; /* Hide placeholder in dropdown */
+    color: var(--text-secondary-color);
+    display: none;
 }
 
 #topK:invalid {
-    color: var(--text-secondary-color); /* Placeholder color when not selected */
+    color: var(--text-secondary-color);
 }
 
 .search-form button {
@@ -238,7 +226,6 @@ header h1 {
 .search-form button:hover {
     background-color: var(--search-button-hover-bg);
     border-color: var(--search-button-hover-bg);
-    color: var(--text-color);
 }
 
 .search-form button i {
@@ -305,23 +292,10 @@ header h1 {
     transition: none;
 }
 
-.result-item:hover {
-    background-color: var(--elevated-surface-color);
-    border-color: var(--border-color);
-    transform: none;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-}
-
 .result-item p {
     word-wrap: break-word;
     font-size: 0.9em;
-    color: var(--text-color);
     line-height: 1.5;
-}
-
-.result-item strong {
-    color: var(--text-color);
-    font-weight: 600;
 }
 
 .message {
@@ -343,11 +317,8 @@ footer {
     font-size: 0.8em;
     color: var(--text-secondary-color);
     width: 100%;
-    background-color: transparent;
-    border-top: none;
     margin-top: 1.5em;
 }
-
 footer p { margin: 0; }
 
 @media (max-width: 900px) {

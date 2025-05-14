@@ -1,6 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
     const searchForm = document.getElementById('searchForm');
-    const queryInput = document.getElementById('query');
     const resultsDiv = document.getElementById('results');
     const statusDiv = document.getElementById('status');
     const loader = document.getElementById('loader');
@@ -38,19 +37,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     searchForm.addEventListener('submit', async function(event) {
         event.preventDefault();
-        const query = queryInput.value.trim();
-        
-        if (!query) {
-            resultsDiv.innerHTML = '<p class="message error">Please enter a search query.</p>';
-            return;
-        }
 
-        resultsDiv.innerHTML = ''; // Clear previous results
+        resultsDiv.innerHTML = '';
         loader.style.display = 'block';
 
         try {
             const topK = document.querySelector('#topK').value || '5';
             const currentQuery = document.getElementById('query').value.trim();
+            if (!currentQuery) {
+                resultsContentDiv.innerHTML = '';
+                loader.style.display = 'none';
+                return;
+}
             const response = await fetch(`/search?q=${encodeURIComponent(currentQuery)}&top_k=${topK}`);
             loader.style.display = 'none';
 

@@ -10,3 +10,4 @@ crate-type = ["cdylib"]     # Compile for Python extension
 
 [dependencies]
 pyo3 = { version = "0.24.2", features = ["extension-module"] }
+regex = "1"

@@ -1,9 +1,9 @@
 import numpy as np
 import torch
 import logging
-import re
-from typing import List, Generator
+from typing import List
 from sentence_transformers import SentenceTransformer
+from text_normalizer import chunk_text_rust
 from app.config import EMBED_MODEL_NAME
 
 logging.basicConfig(
@@ -65,30 +65,12 @@ def get_embeddings(texts: list[str]) -> np.ndarray:
     
     return np.array(results)
 
-def chunk_text_generator(text: str, size: int=500, overlap: int=200) -> Generator[str, None, None]:
-    sentences = re.split(r'(?<=[.!?])\s+', text)  # Split at sentence endings
-    
-    current_chunk = []
-    current_length = 0
-    overlap_buffer = []
-    
-    for sentence in sentences:
-        sentence_word_count = len(sentence.split())
-        
-        if current_length + sentence_word_count > size:
-            # Yield current chunk
-            yield ' '.join(current_chunk)
-            
-            # Retain overlap as full sentences
-            overlap_buffer = current_chunk[-int(overlap/10):]  # Keep last 15 sentences (if overlap=150)
-            current_chunk = overlap_buffer.copy()
-            current_length = sum(len(s.split()) for s in current_chunk)
-        
-        current_chunk.append(sentence)
-        current_length += sentence_word_count
-    
-    if current_chunk:
-        yield ' '.join(current_chunk)
-
 def chunk_text(text: str, size: int = 500, overlap: int = 200) -> List[str]:
-    return list(chunk_text_generator(text, size, overlap))
+    if chunk_text_rust is None:
+        raise ImportError("Rust chunk_text_rust function is not available.")
+
+    try:
+        return chunk_text_rust(text, size, overlap)
+    except Exception as e:
+        logger.error(f"Error using Rust chunker: {e}") # ERROR level
+        raise # Re-raise so the caller knows it failed.  Returning nothing causes indexing problems.

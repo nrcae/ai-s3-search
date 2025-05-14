@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: fastapi-search-app-service
+spec:
+  selector:
+    app: fastapi-search-app
+  ports:
+  - protocol: TCP
+    port: 80       # Port the LoadBalancer listens on
+    targetPort: 8000 # Port your container listens on (FastAPI's Uvicorn)
+  type: LoadBalancer

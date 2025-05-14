@@ -15,11 +15,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-s3 = boto3.client(
-    "s3",
-    aws_access_key_id=AWS_ACCESS_KEY,
-    aws_secret_access_key=AWS_SECRET_KEY
-)
+s3 = boto3.client("s3")
 
 def fetch_page(bucket: str, prefix: str = '', continuation_token: str | None = None) -> Dict[str, Any]:
     kwargs = {'Bucket': bucket, 'Prefix': prefix}

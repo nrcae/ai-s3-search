@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fastapi-app-config
+data:
+  S3_BUCKET: "aistoragesearch"
+  # EMBED_MODEL_NAME: "sentence-transformers/multi-qa-mpnet-base-cos-v1"

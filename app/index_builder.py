@@ -44,41 +44,90 @@ def process_pdfs_to_chunks(files: List[str], max_workers: int = 5) -> Generator[
                 except Exception as e:
                     logger.error(f" Chunking text: {e}")
 
+def _normalize_batch(batch: List[str], rust_batch_enabled: bool, rust_single_enabled: bool) -> List[str]:
+    """Helper function to normalize a batch of texts."""
+    if rust_batch_enabled:
+        logger.debug(f"Normalizing batch of {len(batch)} texts using Rust batch.")
+        return normalize_text_batch_rust(batch)
+    elif rust_single_enabled:
+        logger.debug(f"Normalizing batch of {len(batch)} texts using Rust single.")
+        return [normalize_text_rust(c) for c in batch]
+    else:
+        logger.debug(f"Normalizing batch of {len(batch)} texts using Python fallback.")
+        return [normalize_text_fallback(c) for c in batch]
+
+def _process_and_add_batch(
+    current_batch: List[str],
+    vector_store: LanceDBVectorStore,
+    rust_batch_enabled: bool,
+    rust_single_enabled: bool
+):
+    """
+    Helper function to normalize, embed, and add a single batch to the vector store.
+    Returns True if successful, False otherwise.
+    """
+    if not current_batch:
+        return True
+
+    try:
+        normalized_batch = _normalize_batch(current_batch, rust_batch_enabled, rust_single_enabled)
+        
+        if not normalized_batch: # Should not happen if current_batch was not empty
+            logger.warning("Normalization resulted in an empty batch, skipping embedding and adding.")
+            return True # Technically not an error, but nothing was added
+
+        logger.debug(f"Embedding {len(normalized_batch)} normalized texts.")
+        vectors = get_embeddings(normalized_batch)
+
+        logger.debug(f"Adding {len(normalized_batch)} items (vectors and normalized texts) to vector store.")
+        vector_store.add(vectors, normalized_batch)
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to process batch of size {len(current_batch)}. Error: {e}", exc_info=True)
+        return False # Indicate failure for this batch
+
 def optimized_batch_embedding(
     chunk_generator: Generator[str, None, None],
     batch_size: int,
-    vector_store: LanceDBVectorStore
+    vector_store: LanceDBVectorStore,
+    use_rust_batch: bool = True, # Default to using Rust batch if available
+    use_rust_single: bool = False
 ):
-    batch: List[str] = []
+    """
+    Efficiently processes text chunks in batches: normalizes, embeds, and adds to vector store.
+    """
+    if batch_size <= 0:
+        logger.error("batch_size must be positive.")
+        raise ValueError("batch_size must be a positive integer.")
+
+    current_batch: List[str] = []
+    processed_chunks_count = 0
+    failed_batches_count = 0
 
     for chunk in chunk_generator:
-        batch.append(chunk)
-        if len(batch) >= batch_size:
-            normalized_batch = []
-            try:
-                if use_rust_batch: normalized_batch = normalize_text_batch_rust(batch)
-                elif use_rust_single: normalized_batch = [normalize_text_rust(c) for c in batch]
-                else: normalized_batch = [normalize_text_fallback(c) for c in batch]
+        if not isinstance(chunk, str):
+            logger.warning(f"Skipping non-string item from chunk_generator: {type(chunk)}")
+            continue
+        
+        current_batch.append(chunk)
+        
+        if len(current_batch) >= batch_size:
+            if _process_and_add_batch(current_batch, vector_store, use_rust_batch, use_rust_single):
+                processed_chunks_count += len(current_batch)
+            else:
+                failed_batches_count += 1
+            current_batch.clear()
 
-                vectors = get_embeddings(batch)
-                vector_store.add(vectors, batch) # Assumes add sets is_ready eventually
-            except Exception as e:
-                logger.debug(f" Processing batch: {e}")
-            finally:
-                 batch.clear()
+    # Process any remaining chunks in the last batch
+    if current_batch:
+        if _process_and_add_batch(current_batch, vector_store, use_rust_batch, use_rust_single):
+            processed_chunks_count += len(current_batch)
+        else:
+            failed_batches_count += 1
+        current_batch.clear() # Good practice to clear it
 
-    if batch:
-        normalized_batch = []
-        try:
-            if use_rust_batch: normalized_batch = normalize_text_batch_rust(batch)
-            elif use_rust_single: normalized_batch = [normalize_text_rust(c) for c in batch]
-            else: normalized_batch = [normalize_text_fallback(c) for c in batch]
-
-            # Embed and add the final normalized batch
-            vectors = get_embeddings(normalized_batch)
-            vector_store.add(vectors, normalized_batch)
-        except Exception as e:
-            logger.debug(f" Processing final batch: {e}")
+    logger.info(f"Finished optimized batch embedding. Processed chunks: {processed_chunks_count}. Failed batches: {failed_batches_count}.")
 
 def build_index_background(
     vector_store: LanceDBVectorStore,

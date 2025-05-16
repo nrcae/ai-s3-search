@@ -5,6 +5,7 @@ import threading
 import numpy as np
 import pyarrow as pa
 from typing import List, Tuple, Annotated, Optional
+from datetime import datetime, timezone
 from cachetools import LRUCache
 from lancedb.pydantic import Vector, LanceModel
 
@@ -19,7 +20,7 @@ class LanceDBVectorStore:
     def __init__(self, embedding_dim: int = 768, cache_size: int = 1024):
         self.embedding_dim = embedding_dim
         self.db = lancedb.connect("./lancedb_data")
-
+        self.last_indexed_time: Optional[datetime] = None
         self.PydanticSchema = self.create_pydantic_schema(embedding_dim)
 
         # Define the explicit Arrow schema
@@ -80,6 +81,7 @@ class LanceDBVectorStore:
 
             self.text_chunks.extend([item.text for item in data_pydantic_models])
             self.is_ready = True
+            self.last_indexed_time = datetime.now(timezone.utc)
             with self.cache_lock:
                 self.cache.clear()
         except Exception as e:

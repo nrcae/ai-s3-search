@@ -38,8 +38,12 @@ async def search_minimal(
 
 @router.get("/status")
 def status():
+    last_indexed_str = None
+    if vector_store.last_indexed_time:
+        last_indexed_str = vector_store.last_indexed_time.isoformat()
     return {
         "index_ready": vector_store.is_ready,
-        "index_size": len(vector_store.text_chunks)  # Use text_chunks length instead
+        "index_size": len(vector_store.text_chunks),  # Use text_chunks length instead
+        "last_indexed_time": last_indexed_str
     }
 

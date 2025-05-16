@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(`Status check failed: ${response.status} ${response.statusText}`);
             }
             const data = await response.json();
-            statusDiv.textContent = `Indexing: ${data.index_ready ? 'Ready' : 'Indexing...'} | Documents: ${data.index_size || 0}`;
+            statusDiv.innerHTML = `Indexing: ${data.index_ready ? 'Ready' : 'Indexing...'}<br>Documents: ${data.index_size || 0}<br>Last indexed time: ${data.last_indexed_time || 0}`;
             statusDiv.classList.remove('ready', 'not-ready', 'error');
             if (data.index_ready) {
                 statusDiv.classList.add('ready');

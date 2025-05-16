@@ -38,6 +38,36 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function escapeHtml(unsafe) {
+    if (typeof unsafe !== 'string') return '';
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    // Helper function to highlight search terms
+    function highlightTerms(text, query) {
+        if (!query || typeof text !== 'string') {
+            return escapeHtml(text);
+        }
+        // Escape query terms for regex and split into individual words
+        const queryTerms = query.trim().split(/\s+/)
+                            .map(term => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')); // Escape regex special chars
+        if (queryTerms.length === 0 || queryTerms[0] === '') {
+            return escapeHtml(text);
+        }
+        const regex = new RegExp(`(${queryTerms.join('|')})`, 'gi');
+        
+        // First, escape the whole text to prevent XSS from original text
+        let escapedText = escapeHtml(text);
+        
+        // Then, apply highlighting to the escaped text
+        return escapedText.replace(regex, '<mark>$1</mark>');
+    }
+
     // Handle search form submissions
     searchForm.addEventListener('submit', async function(event) {
         event.preventDefault(); // Prevent default form submission (which would cause a page reload)
@@ -79,22 +109,31 @@ document.addEventListener('DOMContentLoaded', () => {
             if (data.results && data.results.length > 0) {
                 // Sort results by score in descending order (highest score first)
                 // Assumes 'item[0]' is the score.
-                data.results.sort((a, b) => b[0] - a[0]);
+                if (data.results && data.results.length > 0) {
+                    data.results.sort((a, b) => b[0] - a[0]);
+                    
+                    const currentQueryValue = document.getElementById('query').value.trim();
+                    
+                    let html = `<p class="results-summary">Found ${data.results.length} result${data.results.length === 1 ? '' : 's'} for "<em>${escapeHtml(currentQueryValue)}</em>"</p>`;
+                    html += '<h3>Results:</h3>';
+                    
+                    data.results.forEach(item => {
+                        const score = item[0];
+                        const text = item[1];
+                        
+                        const highlightedAndEscapedText = highlightTerms(text, currentQueryValue);
+                        
+                        const tooltipText = "Relevance score (0-1 scale): Higher score indicates better match.";
 
-                let html = '<h3>Results:</h3>';
-                data.results.forEach(item => {
-                    const score = item[0]; // Assumes score is the first element in the result item array
-                    const text = item[1];  // Assumes text is the second element
-                    const escapedText = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                    // Ensure this line includes the title attribute:
-                    html += `
-                        <div class="result-item">
-                            <p><strong title="Relevance score (0-1 scale): Higher score indicates better match.">Score:</strong> ${score.toFixed(4)}</p>
-                            <p>${escapedText}</p>
-                        </div>
-                    `;
-                });
-                resultsDiv.innerHTML = html; // Display the formatted results
+                        html += `
+                            <div class="result-item">
+                                <p><strong title="${tooltipText}" data-tooltip="${tooltipText}">Score:</strong> ${score.toFixed(4)}</p>
+                                <p>${highlightedAndEscapedText}</p> {/* Use highlighted text */}
+                            </div>
+                        `;
+                    });
+                    resultsDiv.innerHTML = html;
+                }
             } else {
                 // Inform user if no results were found for their query
                 const currentQueryValue = document.getElementById('query').value.trim();

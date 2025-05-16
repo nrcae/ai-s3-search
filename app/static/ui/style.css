@@ -67,7 +67,7 @@ body {
 
 main.container {
     display: grid;
-    grid-template-columns: minmax(320px, 1fr) 2.2fr;
+    grid-template-columns: minmax(350px, 1.5fr) minmax(450px, 2.5fr);
     gap: 2em;
     width: 100%;
     max-width: 1440px;
@@ -115,6 +115,7 @@ header h1 {
     background-color: rgba(255,255,255,0.05);
     border: 1px solid rgba(255,255,255,0.08);
     color: var(--text-secondary-color);
+    white-space: nowrap;
 }
 
 .status-bar.ready { color: var(--secondary-color); border-color: var(--secondary-color); background-color: rgba(var(--secondary-color-rgb),0.15);}

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Query, HTTPException
 from typing import List, Tuple, Dict, Any
 from app.embedder import get_embeddings
 from app.shared_resources import vector_store
+from app.config import EMBED_MODEL_NAME
 
 router = APIRouter()
 
@@ -44,6 +45,7 @@ def status():
     return {
         "index_ready": vector_store.is_ready,
         "index_size": len(vector_store.text_chunks),  # Use text_chunks length instead
-        "last_indexed_time": last_indexed_str
+        "last_indexed_time": last_indexed_str,
+        "embedding_model_name": EMBED_MODEL_NAME
     }
 

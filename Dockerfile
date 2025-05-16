@@ -33,20 +33,23 @@ ENV VENV_PATH=/opt/venv
 RUN python -m venv $VENV_PATH
 ENV PATH="$VENV_PATH/bin:$PATH"
 
-# Install build dependencies if any Python packages need C compilation
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends gcc build-essential pkg-config libssl-dev && \
-    rm -rf /var/lib/apt/lists/*
-
-# Upgrade pip in venv
-RUN pip install --no-cache-dir --upgrade pip
-
-# Install CPU-only PyTorch first if it's a large dependency from sentence-transformers
-RUN pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-
 # Copy and install Python dependencies from requirements.txt
 COPY ./requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc build-essential pkg-config libssl-dev && \
+    # Upgrade pip
+    pip install --no-cache-dir --upgrade pip && \
+    # Install CPU-only PyTorch first if it's a large dependency
+    pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
+    # Copy and install Python dependencies from requirements.txt
+    # Note: COPY requirements.txt before this RUN block
+    pip install --no-cache-dir -r /tmp/requirements.txt && \
+    # Remove build-time system dependencies AFTER they are used
+    apt-get purge -y --auto-remove gcc build-essential pkg-config libssl-dev && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy and install the Rust wheel from the rust-builder stage
 COPY --from=rust-builder /dist_wheels /tmp/dist_wheels

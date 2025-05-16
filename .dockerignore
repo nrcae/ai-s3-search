@@ -21,4 +21,3 @@ lancedb_data/
 wheels/
 .cache/
 text_normalizer/target/
-text_normalizer/Cargo.lock

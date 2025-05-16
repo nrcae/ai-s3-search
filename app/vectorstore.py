@@ -26,7 +26,8 @@ class LanceDBVectorStore:
         self.arrow_schema = pa.schema([
             pa.field("id", pa.string(), nullable=False),
             pa.field("vector", pa.list_(pa.float32(), self.embedding_dim), nullable=False),
-            pa.field("text", pa.string(), nullable=False)
+            pa.field("text", pa.string(), nullable=False),
+            pa.field("source_id", pa.string(), nullable=True)
         ])
 
         self.table: Optional[lancedb.table.Table] = None
@@ -40,9 +41,10 @@ class LanceDBVectorStore:
             id: str
             vector: Annotated[List[float], Vector(dim)]
             text: str
+            source_id: str
         return VectorSchema
 
-    def add(self, vectors: np.ndarray, texts: List[str]):
+    def add(self, vectors: np.ndarray, texts: List[str], source_ids: List[str]):
         try:
             # Ensure input vectors are float32
             vectors_np = np.ascontiguousarray(vectors.astype(np.float32))
@@ -54,8 +56,9 @@ class LanceDBVectorStore:
             data_pydantic_models = [self.PydanticSchema(
                 id=str(uuid.uuid4()),
                 vector=vector.tolist(),
-                text=text
-            ) for vector, text in zip(vectors_np, texts)]
+                text=text,
+                source_id=source_id
+            ) for vector, text, source_id in zip(vectors_np, texts, source_ids)]
 
             if not data_pydantic_models:
                 logger.warning("No data to add after Pydantic model preparation.")
@@ -83,7 +86,7 @@ class LanceDBVectorStore:
             logger.error(f"Error adding vectors: {e}")
             self.is_ready = False
 
-    def search(self, query_vector: np.ndarray, top_k: int = 2, **kwargs) -> List[Tuple[float, str]]:
+    def search(self, query_vector: np.ndarray, top_k: int = 2, **kwargs) -> List[Tuple[float, str, str]]:
         if not self.is_ready or not self.table:
             return []
 
@@ -115,17 +118,17 @@ class LanceDBVectorStore:
             processed = []
             for _, row in results_df.iterrows():
                 score = 1 / (1 + row["_distance"]) # L2 to similarity
-                processed.append((score, row["text"]))
+                processed.append((score, row["text"], row.get("source_id", "Unknown")))
 
             # Normalize scores
             if processed:
-                scores_only = [s for s, _ in processed] # Corrected to scores_only
+                scores_only = [s for s, _, _ in processed]
                 min_score, max_score = min(scores_only), max(scores_only)
-                if (max_score - min_score) > 1e-9: # Avoid division by zero
-                    processed = [((s - min_score)/(max_score - min_score), t)
-                                for s, t in processed]
-                else: # All scores are the same
-                    processed = [(1.0, t) for _, t in processed]
+                if (max_score - min_score) > 1e-9:
+                    processed = [((s - min_score)/(max_score - min_score), t, sid)
+                                 for s, t, sid in processed]
+                else:
+                    processed = [(1.0, t, sid) for _, t, sid in processed]
 
             with self.cache_lock:
                 self.cache[cache_key] = processed

@@ -26,7 +26,7 @@ async def search_minimal(
              raise ValueError("Embedding failed or dimension mismatch.")
 
         # 4. Perform Search
-        results: List[Tuple[float, str]] = vector_store.search(
+        results: List[Tuple[float, str, str]] = vector_store.search(
             query_vector=query_vector_array,
             top_k=top_k
         )

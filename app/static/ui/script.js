@@ -1,3 +1,4 @@
+// script.js
 document.addEventListener('DOMContentLoaded', () => {
     const searchForm = document.getElementById('searchForm');
     const resultsDiv = document.getElementById('results');
@@ -5,7 +6,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const loader = document.getElementById('loader');
     const currentYearSpan = document.getElementById('currentYear');
 
-    // Set the current year in the footer, if the element exists
     if (currentYearSpan) {
         currentYearSpan.textContent = new Date().getFullYear();
     }
@@ -14,23 +14,17 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const response = await fetch('/status');
             if (!response.ok) {
-                // Handle non-successful HTTP responses (e.g., 404, 500)
                 throw new Error(`Status check failed: ${response.status} ${response.statusText}`);
             }
             const data = await response.json();
-            // Display current indexing status and document count
             statusDiv.textContent = `Indexing: ${data.index_ready ? 'Ready' : 'Indexing...'} | Documents: ${data.index_size || 0}`;
-
-            // Update status bar class for visual feedback based on index readiness
             statusDiv.classList.remove('ready', 'not-ready', 'error');
             if (data.index_ready) {
                 statusDiv.classList.add('ready');
             } else {
                 statusDiv.classList.add('not-ready');
             }
-
         } catch (error) {
-            // Handle errors during status fetch (e.g., network issues, server errors)
             statusDiv.textContent = 'Status: Error fetching status.';
             statusDiv.classList.remove('ready', 'not-ready');
             statusDiv.classList.add('error');
@@ -39,48 +33,38 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function escapeHtml(unsafe) {
-    if (typeof unsafe !== 'string') return '';
-    return unsafe
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+        if (typeof unsafe !== 'string') return '';
+        return unsafe
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
     }
 
-    // Helper function to highlight search terms
     function highlightTerms(text, query) {
         if (!query || typeof text !== 'string') {
             return escapeHtml(text);
         }
-        // Escape query terms for regex and split into individual words
         const queryTerms = query.trim().split(/\s+/)
-                            .map(term => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')); // Escape regex special chars
-        if (queryTerms.length === 0 || queryTerms[0] === '') {
+            .map(term => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+        if (queryTerms.length === 0 || (queryTerms.length === 1 && queryTerms[0] === '')) {
             return escapeHtml(text);
         }
         const regex = new RegExp(`(${queryTerms.join('|')})`, 'gi');
-        
-        // First, escape the whole text to prevent XSS from original text
-        let escapedText = escapeHtml(text);
-        
-        // Then, apply highlighting to the escaped text
-        return escapedText.replace(regex, '<mark>$1</mark>');
+        let escapedTextContent = escapeHtml(text); // Ensure original text is escaped first
+        return escapedTextContent.replace(regex, '<mark>$1</mark>');
     }
 
-    // Handle search form submissions
     searchForm.addEventListener('submit', async function(event) {
-        event.preventDefault(); // Prevent default form submission (which would cause a page reload)
-
-        // Clear previous results and display the loading indicator
+        event.preventDefault();
         resultsDiv.innerHTML = '';
         loader.style.display = 'block';
 
         try {
-            const topK = document.querySelector('#topK').value || '5'; // Get Top-K value, default to 5 if empty
-            const currentQuery = document.getElementById('query').value.trim(); // Get and trim search query
+            const topK = document.querySelector('#topK').value || '5';
+            const currentQuery = document.getElementById('query').value.trim();
 
-            // If the query is empty, clear results, hide loader, and do nothing further
             if (!currentQuery) {
                 resultsDiv.innerHTML = '';
                 loader.style.display = 'none';
@@ -88,64 +72,56 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const response = await fetch(`/search?q=${encodeURIComponent(currentQuery)}&top_k=${topK}`);
-            // Hide loader once the initial response is received
             loader.style.display = 'none';
 
-            // Handle specific HTTP error status codes from the search endpoint
-            if (response.status === 503) { // Service Unavailable (e.g., search index not ready)
+            if (response.status === 503) {
                 resultsDiv.innerHTML = '<p class="message warning">Search index is not ready. Please try again later.</p>';
                 return;
             }
-            if (response.status === 400) { // Bad Request (e.g., invalid query parameters)
-                const errorData = await response.json(); // Attempt to get detailed error message from response body
-                resultsDiv.innerHTML = `<p class="message error">Error: ${errorData.detail || 'Invalid query'}</p>`;
+            if (response.status === 400) {
+                const errorData = await response.json();
+                resultsDiv.innerHTML = `<p class="message error">Error: ${escapeHtml(errorData.detail || 'Invalid query')}</p>`;
                 return;
             }
-            if (!response.ok) { // Handle other non-successful HTTP responses
+            if (!response.ok) {
                 throw new Error(`Search request failed: ${response.status} ${response.statusText}`);
             }
 
-            const data = await response.json();
-            if (data.results && data.results.length > 0) {
-                // Sort results by score in descending order (highest score first)
-                // Assumes 'item[0]' is the score.
-                if (data.results && data.results.length > 0) {
-                    data.results.sort((a, b) => b[0] - a[0]);
-                    
-                    const currentQueryValue = document.getElementById('query').value.trim();
-                    
-                    let html = `<p class="results-summary">Found ${data.results.length} result${data.results.length === 1 ? '' : 's'} for "<em>${escapeHtml(currentQueryValue)}</em>"</p>`;
-                    html += '<h3>Results:</h3>';
-                    
-                    data.results.forEach(item => {
-                        const score = item[0];
-                        const text = item[1];
-                        
-                        const highlightedAndEscapedText = highlightTerms(text, currentQueryValue);
-                        
-                        const tooltipText = "Relevance score (0-1 scale): Higher score indicates better match.";
+            const data = await response.json(); // API now returns { "results": [ [score, text, source_id], ... ] }
 
-                        html += `
-                            <div class="result-item">
-                                <p><strong title="${tooltipText}" data-tooltip="${tooltipText}">Score:</strong> ${score.toFixed(4)}</p>
-                                <p>${highlightedAndEscapedText}</p> {/* Use highlighted text */}
+            if (data.results && data.results.length > 0) {
+                data.results.sort((a, b) => b[0] - a[0]); // Sort by score
+
+                // Use currentQuery which is already defined and trimmed
+                let html = `<p class="results-summary">Found ${data.results.length} result${data.results.length === 1 ? '' : 's'} for "<em>${escapeHtml(currentQuery)}</em>"</p>`;
+                html += '<h3>Results:</h3>';
+                
+                data.results.forEach(item => {
+                    const score = item[0];
+                    const text = item[1];
+                    const sourceId = item[2] || "Unknown Source";
+
+                    const highlightedAndEscapedText = highlightTerms(text, currentQuery);
+                    const tooltipText = "Relevance score (0-1 scale): Higher score indicates better match.";
+                    const escapedSourceId = escapeHtml(sourceId);
+
+                    html += `
+                        <div class="result-item">
+                            <div class="result-header">
+                                <p class="result-score"><strong title="${tooltipText}" data-tooltip="${tooltipText}">Score:</strong> ${score.toFixed(4)}</p>
+                                <p class="result-source" style="margin-bottom: 10px;"><strong>Source:</strong> ${escapedSourceId}</p>
                             </div>
-                        `;
-                    });
-                    resultsDiv.innerHTML = html;
-                }
+                            <p class="result-text">${highlightedAndEscapedText}</p>
+                        </div>
+                    `;
+                });
+                resultsDiv.innerHTML = html;
             } else {
-                // Inform user if no results were found for their query
-                const currentQueryValue = document.getElementById('query').value.trim();
-                // Basic escape function for HTML display (reuse or define if not present)
-                const escapeHtml = (unsafe) => 
-                    unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                resultsDiv.innerHTML = `<p class="message info">No results found for "<em>${escapeHtml(currentQueryValue)}</em>".<br>Try rephrasing your query or using different keywords.</p>`;
+                resultsDiv.innerHTML = `<p class="message info">No results found for "<em>${escapeHtml(currentQuery)}</em>".<br>Try rephrasing your query or using different keywords.</p>`;
             }
         } catch (error) {
-            // Catch-all for network errors or issues during search processing
-            loader.style.display = 'none'; // Ensure loader is hidden on error
-            resultsDiv.innerHTML = `<p class="message error">An error occurred: ${error.message}</p>`;
+            loader.style.display = 'none';
+            resultsDiv.innerHTML = `<p class="message error">An error occurred: ${escapeHtml(error.message)}</p>`;
             console.error('Search error:', error);
         }
     });

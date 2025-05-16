@@ -1,6 +1,6 @@
 import threading
 import concurrent.futures
-from typing import List, Generator
+from typing import List, Generator, Tuple
 from app.vectorstore import LanceDBVectorStore
 from app.s3_loader import fetch_pdf_files, extract_text_from_pdf
 from app.embedder import get_embeddings, chunk_text
@@ -33,16 +33,18 @@ except ImportError:
         def normalize_text_fallback(text: str) -> str:
             return text.strip().lower()
 
-def process_pdfs_to_chunks(files: List[str], max_workers: int = 5) -> Generator[str, None, None]:
+def process_pdfs_to_chunks(files: List[str], max_workers: int = 5) -> Generator[Tuple[str, str], None, None]:
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        for text in executor.map(extract_text_from_pdf, files):
-            if text:
-                try:
-                    # Yield each chunk from the list/iterable returned by chunk_text
-                    for chunk in chunk_text(text):
-                        yield chunk
-                except Exception as e:
-                    logger.error(f" Chunking text: {e}")
+        future_to_s3_key = {executor.submit(extract_text_from_pdf, s3_file_key): s3_file_key for s3_file_key in files}
+        for future in concurrent.futures.as_completed(future_to_s3_key):
+            s3_key = future_to_s3_key[future]
+            try:
+                text = future.result()
+                if text:
+                    for chunk in chunk_text(text): # chunk_text is from app.embedder
+                        yield chunk, s3_key # Yield chunk and its source S3 key
+            except Exception as e:
+                logger.error(f"Processing or chunking text from {s3_key}: {e}")
 
 def _normalize_batch(batch: List[str], rust_batch_enabled: bool, rust_single_enabled: bool) -> List[str]:
     """Helper function to normalize a batch of texts."""
@@ -57,38 +59,35 @@ def _normalize_batch(batch: List[str], rust_batch_enabled: bool, rust_single_ena
         return [normalize_text_fallback(c) for c in batch]
 
 def _process_and_add_batch(
-    current_batch: List[str],
+    current_batch_items: List[Tuple[str, str]], # Expects list of (text, source_id)
     vector_store: LanceDBVectorStore,
     rust_batch_enabled: bool,
     rust_single_enabled: bool
 ):
-    """
-    Helper function to normalize, embed, and add a single batch to the vector store.
-    Returns True if successful, False otherwise.
-    """
-    if not current_batch:
+    if not current_batch_items:
         return True
-
     try:
-        normalized_batch = _normalize_batch(current_batch, rust_batch_enabled, rust_single_enabled)
+        current_batch_texts = [item[0] for item in current_batch_items]
+        current_batch_source_ids = [item[1] for item in current_batch_items]
+        logger.info(f"Processing batch with texts: {len(current_batch_texts)}, source_ids: {len(current_batch_source_ids)}")
+
+        normalized_batch_texts = _normalize_batch(current_batch_texts, rust_batch_enabled, rust_single_enabled)
+        if not normalized_batch_texts:
+            logger.warning("Normalization resulted in an empty batch of texts.")
+            return True
         
-        if not normalized_batch: # Should not happen if current_batch was not empty
-            logger.warning("Normalization resulted in an empty batch, skipping embedding and adding.")
-            return True # Technically not an error, but nothing was added
+        # If normalization can filter out texts, source_ids would need corresponding adjustments.
+        # For a minimal change, we assume normalization doesn't alter the list length in a way that misaligns source_ids.
 
-        logger.debug(f"Embedding {len(normalized_batch)} normalized texts.")
-        vectors = get_embeddings(normalized_batch)
-
-        logger.debug(f"Adding {len(normalized_batch)} items (vectors and normalized texts) to vector store.")
-        vector_store.add(vectors, normalized_batch)
+        vectors = get_embeddings(normalized_batch_texts)
+        vector_store.add(vectors, normalized_batch_texts, current_batch_source_ids)
         return True
-        
     except Exception as e:
-        logger.error(f"Failed to process batch of size {len(current_batch)}. Error: {e}", exc_info=True)
-        return False # Indicate failure for this batch
+        logger.error(f"Failed to process batch. Error: {e}", exc_info=True)
+        return False
 
 def optimized_batch_embedding(
-    chunk_generator: Generator[str, None, None],
+    chunk_generator: Generator[Tuple[str, str], None, None],
     batch_size: int,
     vector_store: LanceDBVectorStore,
     use_rust_batch: bool = True, # Default to using Rust batch if available
@@ -101,12 +100,12 @@ def optimized_batch_embedding(
         logger.error("batch_size must be positive.")
         raise ValueError("batch_size must be a positive integer.")
 
-    current_batch: List[str] = []
+    current_batch: List[Tuple[str, str]] = []
     processed_chunks_count = 0
     failed_batches_count = 0
 
     for chunk in chunk_generator:
-        if not isinstance(chunk, str):
+        if not (isinstance(chunk, tuple) and len(chunk) == 2 and isinstance(chunk[0], str) and isinstance(chunk[1], str)):
             logger.warning(f"Skipping non-string item from chunk_generator: {type(chunk)}")
             continue
         
@@ -125,7 +124,7 @@ def optimized_batch_embedding(
             processed_chunks_count += len(current_batch)
         else:
             failed_batches_count += 1
-        current_batch.clear() # Good practice to clear it
+        current_batch.clear()
 
     logger.info(f"Finished optimized batch embedding. Processed chunks: {processed_chunks_count}. Failed batches: {failed_batches_count}.")
 

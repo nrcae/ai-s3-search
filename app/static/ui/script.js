@@ -85,11 +85,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 data.results.forEach(item => {
                     const score = item[0]; // Assumes score is the first element in the result item array
                     const text = item[1];  // Assumes text is the second element
-                    // Basic HTML escaping for the displayed text to prevent XSS vulnerabilities
                     const escapedText = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                    // Ensure this line includes the title attribute:
                     html += `
                         <div class="result-item">
-                            <p><strong>Score:</strong> ${score.toFixed(4)}</p>
+                            <p><strong title="Relevance score (0-1 scale): Higher score indicates better match.">Score:</strong> ${score.toFixed(4)}</p>
                             <p>${escapedText}</p>
                         </div>
                     `;
@@ -97,7 +97,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 resultsDiv.innerHTML = html; // Display the formatted results
             } else {
                 // Inform user if no results were found for their query
-                resultsDiv.innerHTML = '<p class="message info">No results found for your query.</p>';
+                const currentQueryValue = document.getElementById('query').value.trim();
+                // Basic escape function for HTML display (reuse or define if not present)
+                const escapeHtml = (unsafe) => 
+                    unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                resultsDiv.innerHTML = `<p class="message info">No results found for "<em>${escapeHtml(currentQueryValue)}</em>".<br>Try rephrasing your query or using different keywords.</p>`;
             }
         } catch (error) {
             // Catch-all for network errors or issues during search processing

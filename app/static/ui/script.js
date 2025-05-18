@@ -1,4 +1,3 @@
-// script.js
 document.addEventListener('DOMContentLoaded', () => {
     const searchForm = document.getElementById('searchForm');
     const resultsDiv = document.getElementById('results');
@@ -17,7 +16,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(`Status check failed: ${response.status} ${response.statusText}`);
             }
             const data = await response.json();
-            statusDiv.innerHTML = `Indexing: ${data.index_ready ? 'Ready' : 'Indexing...'}<br>Documents: ${data.index_size || 0}<br>Last Indexed Time: ${data.last_indexed_time || 0}<br>Model Name: ${data.embedding_model_name || 0}`;
+            let humanReadableTime = 'N/A';
+            const isoTimestampString = data.last_indexed_time;
+
+            // Check if isoTimestampString is a non-empty string
+            if (typeof isoTimestampString === 'string' && isoTimestampString.trim() !== '') {
+                const d = new Date(isoTimestampString);
+
+                if (d instanceof Date && !isNaN(d.valueOf())) {
+                    const datePart = d.toLocaleDateString('sv-SE');
+                    const timePart = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+                    humanReadableTime = `${datePart} ${timePart}`;
+                }
+            }
+            statusDiv.innerHTML = `Indexing: ${data.index_ready ? 'Ready' : 'Indexing...'}<br>Documents: ${data.index_size || 0}<br>Last Indexed Time: ${humanReadableTime}`;
+            if (modelNameDisplay) {
+                modelNameDisplay.textContent = `Model: ${data.embedding_model_name || 'N/A'}`;
+            }
             statusDiv.classList.remove('ready', 'not-ready', 'error');
             if (data.index_ready) {
                 statusDiv.classList.add('ready');

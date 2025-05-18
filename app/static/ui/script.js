@@ -52,7 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return escapeHtml(text);
         }
         const regex = new RegExp(`(${queryTerms.join('|')})`, 'gi');
-        let escapedTextContent = escapeHtml(text); // Ensure original text is escaped first
+        let escapedTextContent = escapeHtml(text);
         return escapedTextContent.replace(regex, '<mark>$1</mark>');
     }
 
@@ -60,6 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
         event.preventDefault();
         resultsDiv.innerHTML = '';
         loader.style.display = 'block';
+        const startTime = performance.now();
 
         try {
             const topK = document.querySelector('#topK').value || '5';
@@ -87,14 +88,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(`Search request failed: ${response.status} ${response.statusText}`);
             }
 
-            const data = await response.json(); // API now returns { "results": [ [score, text, source_id], ... ] }
+            const data = await response.json();
+            const endTime = performance.now();
+            const queryTime = ((endTime - startTime) / 1000).toFixed(2);
+            const resultCount = data.results.length;
+            resultsDiv.innerHTML = `<h3>Found ${resultCount} result${resultCount === 1 ? '' : 's'} in ${queryTime} seconds</h3>`;
 
             if (data.results && data.results.length > 0) {
                 data.results.sort((a, b) => b[0] - a[0]); // Sort by score
 
-                // Use currentQuery which is already defined and trimmed
-                let html = `<p class="results-summary">Found ${data.results.length} result${data.results.length === 1 ? '' : 's'} for "<em>${escapeHtml(currentQuery)}</em>"</p>`;
-                html += '<h3>Results:</h3>';
+                let html = ``;
                 
                 data.results.forEach(item => {
                     const score = item[0];
@@ -115,7 +118,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                     `;
                 });
-                resultsDiv.innerHTML = html;
+                resultsDiv.innerHTML += html;
             } else {
                 resultsDiv.innerHTML = `<p class="message info">No results found for "<em>${escapeHtml(currentQuery)}</em>".<br>Try rephrasing your query or using different keywords.</p>`;
             }

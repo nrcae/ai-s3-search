@@ -4,10 +4,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const statusDiv = document.getElementById('status');
     const loader = document.getElementById('loader');
     const currentYearSpan = document.getElementById('currentYear');
+    const modelNameDisplay = document.getElementById('modelNameDisplay');
+    const topKInput = document.getElementById('topK');
+    const queryInput = document.getElementById('query');
 
     if (currentYearSpan) {
         currentYearSpan.textContent = new Date().getFullYear();
     }
+
+    const dateLocale = 'sv-SE';
+    const timeOptions = { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' };
 
     async function fetchStatus() {
         try {
@@ -19,30 +25,28 @@ document.addEventListener('DOMContentLoaded', () => {
             let humanReadableTime = 'N/A';
             const isoTimestampString = data.last_indexed_time;
 
-            // Check if isoTimestampString is a non-empty string
             if (typeof isoTimestampString === 'string' && isoTimestampString.trim() !== '') {
                 const d = new Date(isoTimestampString);
-
                 if (d instanceof Date && !isNaN(d.valueOf())) {
-                    const datePart = d.toLocaleDateString('sv-SE');
-                    const timePart = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-                    humanReadableTime = `${datePart} ${timePart}`;
+                    const datePart = d.toLocaleDateString(dateLocale);
+                    const timePart = d.toLocaleTimeString('en-GB', timeOptions);
+                    humanReadableTime = `${datePart} ${timePart} UTC`;
                 }
             }
             statusDiv.innerHTML = `Indexing: ${data.index_ready ? 'Ready' : 'Indexing...'}<br>Documents: ${data.index_size || 0}<br>Last Indexed Time: ${humanReadableTime}`;
+
             if (modelNameDisplay) {
                 modelNameDisplay.textContent = `Model: ${data.embedding_model_name || 'N/A'}`;
             }
-            statusDiv.classList.remove('ready', 'not-ready', 'error');
-            if (data.index_ready) {
-                statusDiv.classList.add('ready');
-            } else {
-                statusDiv.classList.add('not-ready');
-            }
+
+            statusDiv.classList.toggle('ready', data.index_ready);
+            statusDiv.classList.toggle('not-ready', !data.index_ready);
+            statusDiv.classList.remove('error');
+
         } catch (error) {
             statusDiv.textContent = 'Status: Error fetching status.';
-            statusDiv.classList.remove('ready', 'not-ready');
             statusDiv.classList.add('error');
+            statusDiv.classList.remove('ready', 'not-ready');
             console.error('Error fetching status:', error);
         }
     }
@@ -67,7 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return escapeHtml(text);
         }
         const regex = new RegExp(`(${queryTerms.join('|')})`, 'gi');
-        let escapedTextContent = escapeHtml(text);
+        const escapedTextContent = escapeHtml(text);
         return escapedTextContent.replace(regex, '<mark>$1</mark>');
     }
 
@@ -78,17 +82,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const startTime = performance.now();
 
         try {
-            const topK = document.querySelector('#topK').value || '5';
-            const currentQuery = document.getElementById('query').value.trim();
+            const topK = topKInput.value || '5';
+            const currentQuery = queryInput.value.trim();
 
             if (!currentQuery) {
-                resultsDiv.innerHTML = '';
-                loader.style.display = 'none';
                 return;
             }
 
             const response = await fetch(`/search?q=${encodeURIComponent(currentQuery)}&top_k=${topK}`);
-            loader.style.display = 'none';
 
             if (response.status === 503) {
                 resultsDiv.innerHTML = '<p class="message warning">Search index is not ready. Please try again later.</p>';
@@ -107,23 +108,20 @@ document.addEventListener('DOMContentLoaded', () => {
             const endTime = performance.now();
             const queryTime = ((endTime - startTime) / 1000).toFixed(2);
             const resultCount = data.results.length;
-            resultsDiv.innerHTML = `<h3>Found ${resultCount} result${resultCount === 1 ? '' : 's'} in ${queryTime} seconds</h3>`;
+
+            let contentHtml = `<h3>Found ${resultCount} result${resultCount === 1 ? '' : 's'} in ${queryTime} seconds</h3>`;
 
             if (data.results && data.results.length > 0) {
-                data.results.sort((a, b) => b[0] - a[0]); // Sort by score
+                data.results.sort((a, b) => b[0] - a[0]);
 
-                let html = ``;
-                
-                data.results.forEach(item => {
-                    const score = item[0];
-                    const text = item[1];
-                    const sourceId = item[2] || "Unknown Source";
-
+                const itemsHtml = data.results.map(item => {
+                    const [score, text, sourceIdRaw] = item;
+                    const sourceId = sourceIdRaw || "Unknown Source";
                     const highlightedAndEscapedText = highlightTerms(text, currentQuery);
                     const tooltipText = "Relevance score (0-1 scale): Higher score indicates better match.";
                     const escapedSourceId = escapeHtml(sourceId);
 
-                    html += `
+                    return `
                         <div class="result-item">
                             <div class="result-header">
                                 <p class="result-score"><strong title="${tooltipText}" data-tooltip="${tooltipText}">Score:</strong> ${score.toFixed(4)}</p>
@@ -132,18 +130,21 @@ document.addEventListener('DOMContentLoaded', () => {
                             <p class="result-text">${highlightedAndEscapedText}</p>
                         </div>
                     `;
-                });
-                resultsDiv.innerHTML += html;
+                }).join('');
+                contentHtml += itemsHtml;
             } else {
-                resultsDiv.innerHTML = `<p class="message info">No results found for "<em>${escapeHtml(currentQuery)}</em>".<br>Try rephrasing your query or using different keywords.</p>`;
+                contentHtml = `<p class="message info">No results found for "<em>${escapeHtml(currentQuery)}</em>".<br>Try rephrasing your query or using different keywords.</p>`;
             }
+            resultsDiv.innerHTML = contentHtml;
+
         } catch (error) {
-            loader.style.display = 'none';
             resultsDiv.innerHTML = `<p class="message error">An error occurred: ${escapeHtml(error.message)}</p>`;
             console.error('Search error:', error);
+        } finally {
+            loader.style.display = 'none';
         }
     });
 
     fetchStatus();
-    setInterval(fetchStatus, 1000); // Check status every second
+    setInterval(fetchStatus, 5000);
 });

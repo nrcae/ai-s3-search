@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Query, HTTPException
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Dict, Any, Optional
 from app.embedder import get_embeddings
 from app.shared_resources import vector_store
 from app.config import EMBED_MODEL_NAME
@@ -38,13 +38,27 @@ async def search_minimal(
          raise 
 
 @router.get("/status")
-def status():
-    last_indexed_str = None
+def status() -> Dict[str, Any]:
+    last_indexed_str: Optional[str] = None
     if vector_store.last_indexed_time:
         last_indexed_str = vector_store.last_indexed_time.isoformat()
+
+    index_size: int = 0
+    if vector_store.table:
+        try:
+            index_size = vector_store.table.count_rows()
+        except Exception as e:
+            index_size = -1
+    elif vector_store.is_ready and not vector_store.table:
+        # If the store is marked "ready" but there's no table, it implies an empty index.
+        index_size = 0
+    elif not vector_store.is_ready:
+        # If not ready, we might not know the size or it's actively changing
+        index_size = -1
+
     return {
         "index_ready": vector_store.is_ready,
-        "index_size": len(vector_store.text_chunks),  # Use text_chunks length instead
+        "index_size": index_size,
         "last_indexed_time": last_indexed_str,
         "embedding_model_name": EMBED_MODEL_NAME
     }

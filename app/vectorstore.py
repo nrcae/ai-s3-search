@@ -32,7 +32,6 @@ class LanceDBVectorStore:
         ])
 
         self.table: Optional[lancedb.table.Table] = None
-        self.text_chunks: List[str] = []
         self.is_ready: bool = False
         self.cache = LRUCache(maxsize=cache_size)
         self.cache_lock = threading.Lock()
@@ -79,7 +78,6 @@ class LanceDBVectorStore:
                 # Table already exists, assume its schema is correct or was previously corrected.
                 self.table.add(data_pydantic_models)
 
-            self.text_chunks.extend([item.text for item in data_pydantic_models])
             self.is_ready = True
             self.last_indexed_time = datetime.now(timezone.utc)
             with self.cache_lock:
@@ -111,16 +109,26 @@ class LanceDBVectorStore:
                 if cache_key in self.cache:
                     return self.cache[cache_key]
 
-            # Perform search, ensuring vector_column_name is specified
             results_df = self.table.search(
                 query_vector_np,
                 vector_column_name="vector"
-            ).limit(top_k).to_df()
+            ).limit(top_k)
+
+            results_df = results_df.select(["text", "source_id"]).to_df()
+            if results_df.empty:
+                return []
+
+            distances = results_df["_distance"].tolist()
+            texts = results_df["text"].tolist()
+            if "source_id" in results_df.columns:
+                source_ids = results_df["source_id"].fillna("Unknown").tolist()
+            else:
+                source_ids = ["Unknown"] * len(texts)
 
             processed = []
-            for _, row in results_df.iterrows():
-                score = 1 / (1 + row["_distance"]) # L2 to similarity
-                processed.append((score, row["text"], row.get("source_id", "Unknown")))
+            for dist, text, sid in zip(distances, texts, source_ids):
+                score = 1 / (1 + dist)
+                processed.append((score, text, sid))
 
             # Normalize scores
             if processed:

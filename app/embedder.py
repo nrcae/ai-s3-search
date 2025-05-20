@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 model = None
 embedding_cache = {}
 
+
 def get_embeddings(texts: list[str]) -> np.ndarray:
     global model, embedding_cache
 
@@ -65,6 +66,7 @@ def get_embeddings(texts: list[str]) -> np.ndarray:
     
     return np.array(results)
 
+
 def chunk_text(text: str, size: int = 500, overlap: int = 200) -> List[str]:
     if chunk_text_rust is None:
         raise ImportError("Rust chunk_text_rust function is not available.")
@@ -72,5 +74,5 @@ def chunk_text(text: str, size: int = 500, overlap: int = 200) -> List[str]:
     try:
         return chunk_text_rust(text, size, overlap)
     except Exception as e:
-        logger.error(f"Error using Rust chunker: {e}") # ERROR level
+        logger.error(f"Error using Rust chunker: {e}")
         raise # Re-raise so the caller knows it failed.  Returning nothing causes indexing problems.

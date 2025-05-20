@@ -13,9 +13,8 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger(__name__)
-
-
 s3 = boto3.client("s3")
+
 
 def fetch_page(bucket: str, prefix: str = '', continuation_token: str | None = None) -> Dict[str, Any]:
     kwargs = {'Bucket': bucket, 'Prefix': prefix}
@@ -27,6 +26,7 @@ def fetch_page(bucket: str, prefix: str = '', continuation_token: str | None = N
     except Exception as e:
         logger.error(f" Fetching S3 page (token: {continuation_token}): {e}")
         return {} # Return empty dict on error to avoid breaking the loop
+
 
 def fetch_pdf_files(max_workers: int = 20) -> List[str]:
     logger.info(f" Fetching PDF file list from s3://{S3_BUCKET}/ concurrently (max_workers={max_workers})...")
@@ -54,7 +54,6 @@ def fetch_pdf_files(max_workers: int = 20) -> List[str]:
     while is_truncated and next_token:
         tokens_to_fetch.append(next_token)
         try:
-            # We only need the token here, so a quick request is okay
             response = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix=s3_prefix, ContinuationToken=next_token)
             if response['KeyCount'] == 0:
                 return []
@@ -93,6 +92,7 @@ def fetch_pdf_files(max_workers: int = 20) -> List[str]:
     logger.info(f" Found total {len(pdf_keys)} PDF files.")
     return pdf_keys
     
+
 def extract_text_from_pdf(s3_key: str) -> str:
     try:
         # Body is a StreamingBody and avoid loading the entire PDF into memory.
@@ -101,17 +101,12 @@ def extract_text_from_pdf(s3_key: str) -> str:
 
         # Wrap the in-memory bytes with io.BytesIO to make it seekable
         pdf_file_like_object = io.BytesIO(pdf_content_bytes)
-        # Process the BytesIO object with PdfReader
         reader = PdfReader(pdf_file_like_object)
-
-        # Extract text using a generator expression within join
         extracted_text = "\n".join(page.extract_text() or "" for page in reader.pages)
 
         return extracted_text
 
-    # Catch both specific S3 errors and general processing errors
     except (ClientError, Exception) as e:
-        # Log the error for debugging
         logger.error(f" Processing PDF '{s3_key}': {e}")
         # Return an empty string consistently on failure
         return ""

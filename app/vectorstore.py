@@ -16,6 +16,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
 class LanceDBVectorStore:
     def __init__(self, embedding_dim: int = 768, cache_size: int = 1024):
         self.embedding_dim = embedding_dim
@@ -36,6 +37,7 @@ class LanceDBVectorStore:
         self.cache = LRUCache(maxsize=cache_size)
         self.cache_lock = threading.Lock()
 
+
     def create_pydantic_schema(self, dim: int) -> type[LanceModel]:
         class VectorSchema(LanceModel):
             id: str
@@ -43,6 +45,7 @@ class LanceDBVectorStore:
             text: str
             source_id: str
         return VectorSchema
+
 
     def add(self, vectors: np.ndarray, texts: List[str], source_ids: List[str]):
         try:
@@ -86,51 +89,54 @@ class LanceDBVectorStore:
             logger.error(f"Error adding vectors: {e}")
             self.is_ready = False
 
+
     def search(self, query_vector: np.ndarray, top_k: int = 2, **kwargs) -> List[Tuple[float, str, str]]:
+        # Ensure the search component is ready and the table exists
         if not self.is_ready or not self.table:
             return []
 
         try:
-            # Ensure query vector is 1D float32 numpy array
+            # Prepare query vector: ensure it's a 1D float32 numpy array
             query_vector_np = np.ascontiguousarray(query_vector.astype(np.float32))
             if query_vector_np.ndim == 2 and query_vector_np.shape[0] == 1:
                 query_vector_np = query_vector_np.flatten()
-            elif query_vector_np.ndim != 1: # Check if it's not already 1D
-                logger.error(f"Query vector has incorrect shape: {query_vector_np.shape}, must be 1D or (1, D).")
+            elif query_vector_np.ndim != 1:
                 return []
             
+            # Check if query vector dimension matches the table's embedding dimension
+            # This check was missing in the provided version but present in the original. Adding it back for robustness.
             if query_vector_np.shape[0] != self.embedding_dim:
-                 logger.error(f"Query vector dimension {query_vector_np.shape[0]} does not match table dimension {self.embedding_dim}")
-                 return []
+                logger.error(f"Query vector dimension {query_vector_np.shape[0]} does not match table dimension {self.embedding_dim}")
+                return []
 
-
+            # Attempt to retrieve results from cache
             cache_key = (query_vector_np.tobytes(), top_k)
             with self.cache_lock:
                 if cache_key in self.cache:
                     return self.cache[cache_key]
 
-            results_df = self.table.search(
-                query_vector_np,
-                vector_column_name="vector"
-            ).limit(top_k)
-
+            # Perform the vector search (only top_k results)
+            results_df = self.table.search(query_vector_np,vector_column_name="vector").limit(top_k)
             results_df = results_df.select(["text", "source_id"]).to_df()
             if results_df.empty:
                 return []
 
+            # Extract data from DataFrame
             distances = results_df["_distance"].tolist()
             texts = results_df["text"].tolist()
+            # Get source_ids, defaulting to "Unknown" if column is missing or value is NaN
             if "source_id" in results_df.columns:
                 source_ids = results_df["source_id"].fillna("Unknown").tolist()
             else:
                 source_ids = ["Unknown"] * len(texts)
 
+            # Process results: calculate initial scores
             processed = []
             for dist, text, sid in zip(distances, texts, source_ids):
                 score = 1 / (1 + dist)
                 processed.append((score, text, sid))
 
-            # Normalize scores
+            # Normalize scores to a 0-1 range if there's a variance
             if processed:
                 scores_only = [s for s, _, _ in processed]
                 min_score, max_score = min(scores_only), max(scores_only)
@@ -138,6 +144,7 @@ class LanceDBVectorStore:
                     processed = [((s - min_score)/(max_score - min_score), t, sid)
                                  for s, t, sid in processed]
                 else:
+                    # All scores are (nearly) identical, set to 1.0
                     processed = [(1.0, t, sid) for _, t, sid in processed]
 
             with self.cache_lock:

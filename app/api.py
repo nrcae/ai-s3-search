@@ -1,10 +1,36 @@
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, UploadFile, File
 from typing import List, Tuple, Dict, Any, Optional
 from app.embedder import get_embeddings
 from app.shared_resources import vector_store
 from app.config import EMBED_MODEL_NAME
+from app.index_builder import build_index_background
+from app.s3_loader import upload_pdf
+import io
 
 router = APIRouter()
+
+@router.post("/upload_pdf")
+async def upload_pdf_endpoint(file: UploadFile = File(...)):
+
+    if not file.filename.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are allowed.")
+
+    try:
+        contents = await file.read()
+        file_content = io.BytesIO(contents)
+
+        # Upload the file to S3
+        if not upload_pdf(file_content, file.filename):
+            raise HTTPException(status_code=500, detail="Failed to upload file to S3.")
+
+        # Rebuild the index in the background
+        build_index_background(vector_store)
+
+        return {"filename": file.filename, "message": "File uploaded successfully and indexing started."}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/search")
 async def search_minimal(

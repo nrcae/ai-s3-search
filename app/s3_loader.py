@@ -16,6 +16,16 @@ logger = logging.getLogger(__name__)
 s3 = boto3.client("s3")
 
 
+def upload_pdf(file_content: io.BytesIO, filename: str) -> bool:
+    try:
+        s3.upload_fileobj(file_content, S3_BUCKET, filename)
+        logger.info(f"File '{filename}' uploaded to S3 bucket '{S3_BUCKET}'.")
+        return True
+    except ClientError as e:
+        logger.error(f"Error uploading file '{filename}' to S3: {e}")
+        return False
+
+
 def fetch_page(bucket: str, prefix: str = '', continuation_token: str | None = None) -> Dict[str, Any]:
     kwargs = {'Bucket': bucket, 'Prefix': prefix}
     if continuation_token:

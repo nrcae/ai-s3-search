@@ -7,6 +7,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const modelNameDisplay = document.getElementById('modelNameDisplay');
     const topKInput = document.getElementById('topK');
     const queryInput = document.getElementById('query');
+    const uploadForm = document.getElementById('uploadForm');
+    const fileInput = document.getElementById('fileInput');
+    const uploadStatusDiv = document.getElementById('uploadStatus');
+    const uploadButton = document.getElementById('uploadButton');
 
     if (currentYearSpan) {
         currentYearSpan.textContent = new Date().getFullYear();
@@ -14,6 +18,66 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const dateLocale = 'sv-SE';
     const timeOptions = { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' };
+
+    if (uploadForm) {
+        uploadForm.addEventListener('submit', async function(event) {
+            event.preventDefault();
+            if (!fileInput.files || fileInput.files.length === 0) {
+                displayUploadMessage('Please select a PDF file to upload.', 'error');
+                return;
+            }
+
+            const file = fileInput.files[0];
+            if (file.type !== "application/pdf") {
+                displayUploadMessage('Invalid file type. Please select a PDF.', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            uploadButton.disabled = true;
+            uploadButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+            displayUploadMessage('Uploading file...', 'info', false);
+
+            try {
+                const response = await fetch('/upload_pdf', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    displayUploadMessage(`Success: ${result.filename} uploaded. Indexing started.`, 'info');
+                    fileInput.value = '';
+                    fetchStatus();
+                } else {
+                    displayUploadMessage(`Error: ${result.detail || 'Upload failed.'}`, 'error');
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                displayUploadMessage('An unexpected error occurred during upload.', 'error');
+            } finally {
+                uploadButton.disabled = false;
+                uploadButton.innerHTML = '<i class="fas fa-upload"></i> Upload';
+            }
+        });
+    }
+
+    function displayUploadMessage(message, type, autoHide = true) {
+        if (uploadStatusDiv) {
+            uploadStatusDiv.textContent = message;
+            uploadStatusDiv.className = `message ${type}`;
+            uploadStatusDiv.style.display = 'block';
+
+            if (autoHide) {
+                setTimeout(() => {
+                    uploadStatusDiv.style.display = 'none';
+                }, 5000);
+            }
+        }
+    }
 
     async function fetchStatus() {
         try {

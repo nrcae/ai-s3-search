@@ -17,6 +17,18 @@
                     <br>
                     <p id="modelNameDisplay">Model: Loading...</p>
                 </div>
+                <!-- New PDF Upload Form START -->
+                <div class="upload-section">
+                    <h2>Upload New PDF</h2>
+                    <form id="uploadForm" class="upload-form">
+                        <input type="file" id="fileInput" name="file" accept=".pdf" required>
+                        <button type="submit" id="uploadButton">
+                            <i class="fas fa-upload"></i> Upload
+                        </button>
+                    </form>
+                    <div id="uploadStatus" class="message" style="display: none;"></div>
+                </div>
+                <!-- New PDF Upload Form END -->
                 <div id="status" class="status-bar">Checking status...</div>
             </header>
 

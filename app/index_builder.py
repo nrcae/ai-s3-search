@@ -2,7 +2,7 @@ import threading
 import concurrent.futures
 from typing import List, Generator, Tuple
 from app.vectorstore import LanceDBVectorStore
-from app.s3_loader import fetch_pdf_files, extract_text_from_pdf
+from app.s3_loader import fetch_pdf_files, extract_text_from_pdf, upload_pdf
 from app.embedder import get_embeddings, chunk_text
 import logging
 

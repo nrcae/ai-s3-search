@@ -11,6 +11,26 @@ document.addEventListener('DOMContentLoaded', () => {
     const fileInput = document.getElementById('fileInput');
     const uploadStatusDiv = document.getElementById('uploadStatus');
     const uploadButton = document.getElementById('uploadButton');
+    const sourceSelect = document.getElementById('sourceSelect');
+
+    async function loadSources() {
+        try {
+            const response = await fetch('/sources');
+            if (!response.ok) throw new Error('Failed to fetch sources');
+            const data = await response.json();
+
+            if (data.sources && Array.isArray(data.sources)) {
+                data.sources.forEach(src => {
+                    const option = document.createElement('option');
+                    option.value = src;
+                    option.textContent = src;
+                    sourceSelect.appendChild(option);
+                });
+            }
+        } catch (error) {
+            console.error('Error loading sources:', error);
+        }
+    }
 
     if (currentYearSpan) {
         currentYearSpan.textContent = new Date().getFullYear();
@@ -148,8 +168,15 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const topK = topKInput.value || '5';
             const currentQuery = queryInput.value.trim();
+            const sourceId = sourceSelect.value;
+
+            let searchUrl = `/search?q=${encodeURIComponent(currentQuery)}&top_k=${topK}`;
+            if (sourceId) {
+                searchUrl += `&source_id=${encodeURIComponent(sourceId)}`;
+            }
 
             if (!currentQuery) {
+                alert('Please enter a search query.');
                 return;
             }
 
@@ -209,6 +236,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    loadSources();
     fetchStatus();
     setInterval(fetchStatus, 5000);
 });

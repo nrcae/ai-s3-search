@@ -35,7 +35,8 @@ async def upload_pdf_endpoint(file: UploadFile = File(...)):
 @router.get("/search")
 async def search_minimal(
     q: str = Query(..., description="Semantic search query"),
-    top_k: int = Query(5, ge=1, le=50, description="Number of results")
+    top_k: int = Query(5, ge=1, le=50, description="Number of results"),
+    source_id: Optional[str] = Query(None, description="Filter results by source PDF file")
 ) -> Dict[str, Any]:
     # Check Index Readiness -> Use HTTPException 503
     if not vector_store.is_ready:
@@ -55,7 +56,8 @@ async def search_minimal(
         # Perform Search
         results: List[Tuple[float, str, str]] = vector_store.search(
             query_vector=query_vector_array,
-            top_k=top_k
+            top_k=top_k,
+            source_id=source_id
         )
         return {"results": results}
 
@@ -89,3 +91,14 @@ def status() -> Dict[str, Any]:
         "embedding_model_name": EMBED_MODEL_NAME
     }
 
+
+@router.get("/sources")
+async def list_sources() -> Dict[str, Any]:
+
+    if not vector_store.is_ready:
+        raise HTTPException(status_code=503, detail="Index not ready. Try again later.")
+
+    # Assuming vector_store can return all unique source_ids
+    sources = vector_store.get_all_source_ids()  # Implement this method accordingly
+
+    return {"sources": sources}

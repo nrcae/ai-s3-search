@@ -90,7 +90,7 @@ class LanceDBVectorStore:
             self.is_ready = False
 
 
-    def search(self, query_vector: np.ndarray, top_k: int = 2, **kwargs) -> List[Tuple[float, str, str]]:
+    def search(self, query_vector: np.ndarray, top_k: int = 2, source_id: Optional[str] = None, **kwargs) -> List[Tuple[float, str, str]]:
         # Ensure the search component is ready and the table exists
         if not self.is_ready or not self.table:
             return []
@@ -115,9 +115,15 @@ class LanceDBVectorStore:
                 if cache_key in self.cache:
                     return self.cache[cache_key]
 
+            query_builder = self.table.search(query_vector_np, vector_column_name="vector")
+            if source_id:
+                # Ensure source_id is properly quoted for the SQL WHERE clause
+                # Replace single quotes within source_id to prevent SQL injection if source_id could contain them.
+                safe_source_id = source_id.replace("'", "''")
+                query_builder = query_builder.where(f"source_id = '{safe_source_id}'")
+
             # Perform the vector search (only top_k results)
-            results_df = self.table.search(query_vector_np,vector_column_name="vector").limit(top_k)
-            results_df = results_df.select(["text", "source_id"]).to_df()
+            results_df = query_builder.limit(top_k).select(["text", "source_id", "_distance"]).to_df()
             if results_df.empty:
                 return []
 
@@ -155,3 +161,48 @@ class LanceDBVectorStore:
         except Exception as e:
             logger.error(f"Search error: {e}")
             return []
+
+    def get_all_source_ids(self) -> List[str]:
+    
+            if not self.is_ready or self.table is None:
+                logger.warning("Vector store not ready or table not initialized. Cannot get source IDs.")
+                return []
+
+            if self.table.count_rows() == 0:
+                logger.info("Table 'vectors' is empty. No source IDs to return.")
+                return []
+
+            try:
+                logger.debug("Fetching all source IDs...")
+                # Use to_arrow() to get an Arrow Table, then operate on its columns
+                # This is generally more memory-efficient for large datasets than to_pandas() directly
+                arrow_table = self.table.to_lance().to_table(columns=["source_id"])
+
+                if arrow_table.num_rows == 0:
+                    return []
+
+                # Get the source_id column as an Arrow Array
+                source_id_column = arrow_table.column("source_id")
+
+                # Get unique values from the Arrow Array
+                unique_arrow_array = source_id_column.unique()
+
+                # Convert unique Arrow Array to a Python list
+                # Filter out None values and empty strings, convert to string, then ensure uniqueness again with set
+                # and finally sort.
+                raw_unique_sources = unique_arrow_array.to_pylist()
+
+                valid_sources = set()
+                for s in raw_unique_sources:
+                    if s is not None:
+                        s_str = str(s).strip()
+                        if s_str: # Ensure non-empty after stripping
+                            valid_sources.add(s_str)
+
+                sorted_sources = sorted(list(valid_sources))
+                logger.info(f"Retrieved {len(sorted_sources)} unique source IDs.")
+                return sorted_sources
+
+            except Exception as e:
+                logger.error(f"Error getting all source IDs: {e}", exc_info=True)
+                return []

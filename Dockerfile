@@ -25,9 +25,7 @@ RUN maturin build --release --manifest-path /build_rust/text_normalizer/Cargo.to
 # Stage 2: Python Venv Builder
 FROM python:3.12-slim AS python-venv-builder
 
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-ENV VENV_PATH=/opt/venv
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 VENV_PATH=/opt/venv
 
 # Create a virtual environment
 RUN python -m venv $VENV_PATH
@@ -59,16 +57,13 @@ RUN pip install --no-cache-dir /tmp/dist_wheels/*.whl && \
 # Final Runtime Image
 FROM python:3.12-slim AS final
 
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-ENV VENV_PATH=/opt/venv
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 VENV_PATH=/opt/venv PATH="$VENV_PATH/bin:$PATH"
 
 # Copy the virtual environment from the python-venv-builder stage
 COPY --from=python-venv-builder $VENV_PATH $VENV_PATH
 
 # Create a non-root user and group
-RUN groupadd --gid 1001 appuser && \
-    useradd --uid 1001 --gid 1001 -ms /bin/bash appuser
+RUN groupadd --gid 1001 appuser && useradd --uid 1001 --gid 1001 -ms /bin/bash appuser
 
 WORKDIR /app
 
@@ -83,11 +78,6 @@ RUN mkdir /app/lancedb_data && \
 
 # Switch to the non-root user
 USER appuser
-
-# Add venv to PATH
-ENV PATH="$VENV_PATH/bin:$PATH"
-
-# Expose the application port
 EXPOSE 8000
 
 # Define the command to run the application
